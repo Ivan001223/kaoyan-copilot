@@ -1,0 +1,43 @@
+# Core Framework
+langchain
+langgraph
+langchain-openai
+langchain-chroma
+langchain-community
+langchain-experimental
+langchain-huggingface
+
+# Vector Store
+chromadb
+
+# Web API
+fastapi
+uvicorn
+langserve[all]
+python-multipart
+httpx
+
+# Data Processing & Document Loading
+pypdf
+fpdf
+docx2txt
+openpyxl
+pandas
+
+# Search
+duckduckgo-search
+
+# Utils
+python-dotenv
+pydantic
+sentence-transformers
+transformers>=4.46.3
+qwen-vl-utils
+einops
+timm
+pillow
+pdf2image
+torch
+
+# UI
+streamlit
