@@ -1,23 +1,31 @@
 # Kaoyan Copilot 🎓
 
-全流程考研备考 AI 助手，基于 Multi-Agent 架构，提供择校咨询、知识点辅导、复习规划及心态建设等服务。
+全流程考研备考 AI 助手，基于 Multi-Agent 架构，提供择校咨询、知识点辅导、复习规划、模拟复试及心态建设等服务。
 
 ## ✨ 核心功能
 
-系统包含多个垂直领域的智能体（Agents）：
+系统包含多个垂直领域的智能体（Agents）及核心能力：
 
 - **Tutor Agent (导师)**: 学科知识解答、题目讲解，利用 RAG 技术基于教材回答。
 - **Consultant Agent (咨询师)**: 院校数据查询、报录比分析、择校建议。
 - **Planner Agent (规划师)**: 个性化复习计划制定、进度管理。
+- **Estimator Agent (估分师)**: 基于模拟成绩、目标院校分数线及学习习惯，科学估算上岸概率并生成分析报告。
+- **Interviewer Agent (面试官)**: 模拟研究生复试场景（"张教授"），进行专业提问，并对回答的逻辑、词汇及自信度进行打分点评。
+- **Politics Agent (时政专员)**: 每日自动检索并筛选考研政治相关的时政新闻（如重要会议、讲话），提取背诵考点。
 - **Mentor Agent (学长/学姐)**: 心理疏导、备考经验分享、加油打气。
 - **Radar Agent (雷达)**: 每日自动监测目标院校官网更新（如招生简章、复试名单）。
 
+### 🧠 核心能力
+- **OCR & 公式识别**: 集成 DeepSeek-OCR / Qwen-VL，支持高精度识别数学公式、PDF文档并转换为 Markdown 格式，方便知识库构建。
+
 ## 🛠️ 技术架构
 
-- **后端**: Python, FastAPI, LangChain, LangGraph
-- **前端**: Next.js (React), Tailwind CSS
+- **后端**: Python 3.11, FastAPI, LangChain, LangGraph
+- **前端**: Next.js 14 (React), Tailwind CSS, TypeScript
 - **向量数据库**: ChromaDB (本地部署)
-- **大模型支持**: OpenAI GPT-4, DeepSeek 等 (通过 LangChain 适配)
+- **大模型支持**: OpenAI GPT-4, DeepSeek (通过 LangChain 适配)
+- **OCR/多模态**: DeepSeek-OCR, Qwen-VL-Utils
+- **工具集**: DuckDuckGo Search (时政搜索), PyPDF
 
 ## 🚀 快速开始
 
@@ -40,7 +48,7 @@ pip install -r requirements.txt
 
 # 3. 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件，填入你的 API Key (OPENAI_API_KEY 或 LLM_API_KEY)
+# 编辑 .env 文件，填入你的 API Key (OPENAI_API_KEY, LLM_API_KEY 等)
 ```
 
 ### 3. 前端设置
@@ -87,8 +95,8 @@ streamlit run main.py
 ```
 kaoyan_copilot/
 ├── app/                  # 后端核心代码
-│   ├── agents/           # 各个垂直领域 Agent 实现 (Tutor, Planner, etc.)
-│   ├── core/             # 核心逻辑 (LangGraph 状态, RAG 引擎, 工具集)
+│   ├── agents/           # 各个垂直领域 Agent 实现 (Tutor, Planner, Estimator, Interviewer, etc.)
+│   ├── core/             # 核心逻辑 (LangGraph 状态, RAG 引擎, OCR 引擎, 工具集)
 │   └── graph.py          # Agent 编排图 (Orchestrator)
 ├── data/                 # 数据存储
 │   ├── vector_store/     # ChromaDB 向量数据库文件
@@ -107,9 +115,9 @@ kaoyan_copilot/
 - **新增 Agent**: 在 `app/agents/` 下创建新的 Agent 类，并在 `app/graph.py` 中注册。
 - **RAG 数据管理**: 
   - 将 PDF 文档放入 `data/documents/`。
-  - 运行脚本导入数据:
+  - 运行脚本导入数据 (支持 OCR):
     ```bash
     python ingest.py path/to/your/document.pdf
     ```
   - 或者通过 API `/upload` 接口上传。
-- **定时任务**: `server.py` 中包含后台调度器，默认每天 08:00 运行 Radar Agent。
+- **定时任务**: `server.py` 中包含后台调度器，用于运行 Radar Agent 和 Politics Agent。
