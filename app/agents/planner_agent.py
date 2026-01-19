@@ -1,11 +1,15 @@
 import os
+import datetime
 from typing import List, Literal, Union, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage
-from app.core.state import AgentState
+from langchain_core.messages import SystemMessage, AIMessage
 import pandas as pd
+
+from app.core.state import AgentState
+from app.core.llm_factory import get_llm
+from app.core.utils.json_parser import parse_json_from_llm
 
 # 1. 结构化输出模型
 class StudyTask(BaseModel):
@@ -26,8 +30,6 @@ def get_planner_node():
     返回 Planner Agent 的 LangGraph 节点。
     """
     # 初始化 LLM
-    # 初始化 LLM
-    from app.core.llm_factory import get_llm
     llm = get_llm(temperature=0)
     
     # 强制结构化输出
@@ -94,7 +96,6 @@ def get_planner_node():
                 existing_plan_str = "解析现有计划失败"
 
         # 2. 生成/更新计划
-        import datetime
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         
         try:
@@ -110,16 +111,8 @@ def get_planner_node():
             else:
                 # Manual parsing for Local LLM
                 content = response.content
-                import json
-                import re
-                
-                # Strip markdown code blocks
-                content = re.sub(r'```json\s*', '', content)
-                content = re.sub(r'```', '', content)
-                content = content.strip()
-                
                 try:
-                    data = json.loads(content)
+                    data = parse_json_from_llm(content)
                     schedule_obj = Schedule(**data)
                 except Exception as e:
                     print(f"Failed to parse Planner JSON: {e}, content: {content[:100]}...")
@@ -152,7 +145,6 @@ def get_planner_node():
             
         response_text = f"已为您更新学习计划，共 {task_count} 项任务。\n\n近期安排：\n" + "\n".join(summary_lines)
         
-        from langchain_core.messages import AIMessage
         return {
             "messages": [AIMessage(content=response_text)],
             "context": {"study_plan": new_plan_dict} # 更新 Context

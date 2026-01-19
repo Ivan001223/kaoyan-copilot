@@ -5,6 +5,9 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
+from app.core.llm_factory import get_llm
+from app.core.utils.json_parser import parse_json_from_llm
+
 # 1. Define Structured Output Model
 class RouteDecision(BaseModel):
     """Router decision on which agent should handle the user request or if the task is finished."""
@@ -31,7 +34,6 @@ def route_request(state: Dict[str, Any]) -> RouteDecision:
         return RouteDecision(destination="general", reasoning="No messages found", refined_query="Hello")
 
     # Initialize LLM
-    from app.core.llm_factory import get_llm
     # Use json_mode=True to encourage JSON output, though we will handle parsing manually for robustness
     llm = get_llm(temperature=0, json_mode=True)
 
@@ -183,52 +185,9 @@ def route_request(state: Dict[str, Any]) -> RouteDecision:
         response = chain.invoke({"messages": sanitized_messages})
         content = response.content
         
-        # Manual cleaning and parsing to handle Chain-of-Thought or Markdown artifacts
-        import json
-        import re
-        
-        # 1. Remove <think> tags if present
-        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
-        
-        # 2. Remove Markdown code blocks
-        content = re.sub(r'```json\s*', '', content)
-        content = re.sub(r'```', '', content)
-        
-        # 3. Strip whitespace
-        content = content.strip()
-        
-        # 4. Parse JSON
-        try:
-            # Fix common JSON issues with LaTeX backslashes
-            # Replace single backslashes with double backslashes, but be careful not to double escape
-            # This is a simple heuristic: if we see \ followed by a non-special char, escape it.
-            # However, regex cleaning is safer.
-            
-            # Simple escape for backslashes that look like LaTeX
-            # We want to replace \ with \\, but not if it's already \\ or \" or \n
-            # content = content.replace('\\', '\\\\') # This is too aggressive and might break existing escapes
-            
-            data = json.loads(content)
-            return RouteDecision(**data)
-        except json.JSONDecodeError:
-            # Try to find JSON object if mixed with text
-            match = re.search(r'\{.*\}', content, re.DOTALL)
-            if match:
-                json_str = match.group(0)
-                try:
-                    data = json.loads(json_str)
-                    return RouteDecision(**data)
-                except json.JSONDecodeError:
-                     # Attempt to fix escaped backslashes in the extracted JSON string
-                     # This handles cases like "\frac" appearing in the string value
-                     json_str_fixed = json_str.replace('\\', '\\\\')
-                     try:
-                        data = json.loads(json_str_fixed)
-                        return RouteDecision(**data)
-                     except:
-                        pass
-            
-            raise ValueError(f"Could not parse JSON from content: {content[:100]}...")
+        # Use robust JSON parser
+        data = parse_json_from_llm(content)
+        return RouteDecision(**data)
                 
     except Exception as e:
         print(f"Routing failed: {e}")

@@ -5,12 +5,17 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda, RunnableParallel
 from langchain_core.output_parsers import StrOutputParser
-# ChromaDB 持久化路径
-VECTOR_STORE_PATH = os.path.join("data", "vector_store")
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 from app.core.state import AgentState
+from app.core.llm_factory import get_llm
+from app.core.rag_engine import rag_engine
+from app.core.utils.image_handler import process_multimodal_content
+
+# ChromaDB 持久化路径
+VECTOR_STORE_PATH = os.path.join("data", "vector_store")
 
 def get_tutor_node():
     """
@@ -19,11 +24,7 @@ def get_tutor_node():
     # 初始化向量存储（从磁盘加载）
     # 必须与 RAGEngine 使用相同的 Embeddings
 
-
     # 使用 RAGEngine 进行检索（包含 Rerank）
-    from app.core.rag_engine import rag_engine
-    from langchain_core.runnables import RunnableLambda, RunnableParallel
-
     # 包装 retrieve_context 为 Runnable
     retriever = RunnableLambda(lambda q: rag_engine.retrieve_context(q, k=3))
 
@@ -48,7 +49,6 @@ def get_tutor_node():
     prompt = ChatPromptTemplate.from_template(template)
     
     # 初始化 LLM
-    from app.core.llm_factory import get_llm
     llm = get_llm(temperature=0)
 
     # RAG 链
@@ -94,21 +94,12 @@ def get_tutor_node():
         # If {question} is a list (multimodal), ChatPromptTemplate might handle it if we format correctly.
         
         # Let's create the messages list manually for the LLM
-        system_message = template.format(context=formatted_context, question="[User Question with Image]")
         # We replace the static question placeholder in system prompt with generic text, 
         # and pass the actual user message (which contains the image) as the last message.
-        
-        # However, the template above puts {question} inside the system prompt or user prompt?
-        # The template uses ChatPromptTemplate.from_template(template).
-        # This creates a single HumanMessage (or SystemMessage depending on syntax) or a list.
-        # Actually from_template creates a HumanMessage by default if no role specified?
-        # No, ChatPromptTemplate.from_template creates a SystemMessage? No.
         
         # Let's rebuild the chain logic to support images.
         # We will bypass the 'rag_chain_with_source' for the final generation step
         # and construct the messages directly.
-        
-        from langchain_core.messages import SystemMessage, HumanMessage
         
         # 1. System Message
         sys_msg_content = template.replace("{context}", formatted_context).replace("{question}", "")
@@ -120,50 +111,8 @@ def get_tutor_node():
         # 2. User Message (Multimodal or Text)
         if isinstance(raw_content, list):
              # Filter out local file paths from image URLs if using cloud LLM
-             # Cloud LLMs (like GPT-4o) need public URLs or base64. 
-             # Local file:// URLs won't work unless the LLM is local or we convert to base64.
-             
-             # Check if we are using a cloud model (naive check based on LLM class)
-             # But here llm is a ChatOpenAI instance.
-             # If base_url is openai official, it needs public URL.
-             # If base_url is local (e.g. vllm), it might support whatever.
-             
              # Safest bet: Convert local images to base64 data URIs for the LLM
-             import base64
-             import mimetypes
-             import requests
-             
-             processed_content = []
-             for item in raw_content:
-                 if item.get('type') == 'image_url':
-                     url = item['image_url']['url']
-                     if url.startswith('http://localhost') or url.startswith('http://127.0.0.1'):
-                         # It's a local server URL. We should download it and convert to base64
-                         try:
-                             # Extract path part if needed or just fetch
-                             # Since we are on the server, we could read the file directly if we knew the path mapping
-                             # But fetching via HTTP is generic.
-                             # url: http://localhost:8000/uploads/filename.jpg
-                             resp = requests.get(url)
-                             if resp.status_code == 200:
-                                 mime_type = mimetypes.guess_type(url)[0] or 'image/jpeg'
-                                 b64_data = base64.b64encode(resp.content).decode('utf-8')
-                                 data_uri = f"data:{mime_type};base64,{b64_data}"
-                                 processed_content.append({
-                                     "type": "image_url",
-                                     "image_url": {"url": data_uri}
-                                 })
-                             else:
-                                 # Fallback: keep original (might fail)
-                                 processed_content.append(item)
-                         except Exception as e:
-                             print(f"Error converting image to base64: {e}")
-                             processed_content.append(item)
-                     else:
-                         processed_content.append(item)
-                 else:
-                     processed_content.append(item)
-             
+             processed_content = process_multimodal_content(raw_content)
              messages_to_send.append(HumanMessage(content=processed_content))
         else:
              messages_to_send.append(HumanMessage(content=question_text))
@@ -195,7 +144,6 @@ def get_tutor_node():
         
         # 将响应作为消息更新返回
         #Follow LangGraph 模式：返回一个包含要追加的 'messages' 键的字典
-        from langchain_core.messages import AIMessage
         return {"messages": [AIMessage(content=response, additional_kwargs={"sources": unique_sources})]}
 
     return tutor_node

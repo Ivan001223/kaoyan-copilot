@@ -6,10 +6,16 @@ import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css'; // Formula styles
-import { Send, User, Bot, Loader2, History, Camera, Settings, X, ChevronRight, Square, Image as ImageIcon, Plus, MessageSquare, Trash2, RefreshCw, List, FileText, Globe, Link as LinkIcon } from 'lucide-react';
+import { 
+    Send, User, Bot, Loader2, History, Camera, Settings, X, ChevronRight, Square, 
+    Image as ImageIcon, Plus, MessageSquare, Trash2, RefreshCw, List, FileText, 
+    Globe, Link as LinkIcon 
+} from 'lucide-react';
+
+import { useLLMStream, Message } from '@/hooks/useLLMStream';
+import { api } from '@/services/api';
 import ReasoningBubble from './ReasoningBubble';
 import TypewriterText from './TypewriterText';
-import { useLLMStream, Message } from '@/hooks/useLLMStream';
 import SettingsModal from './SettingsModal';
 import AlertHistoryModal from './AlertHistoryModal';
 
@@ -55,8 +61,7 @@ export default function ChatInterface() {
         // Fetch Quote from Backend (Prevent double fetch in Strict Mode)
         if (!quoteFetchedRef.current) {
             quoteFetchedRef.current = true;
-            fetch('http://localhost:8000/quote')
-                .then(res => res.json())
+            api.getQuote()
                 .then(data => {
                     if (data.quote) setQuote(data.quote);
                 })
@@ -67,11 +72,8 @@ export default function ChatInterface() {
     // Fetch Alerts
     const fetchAlerts = async () => {
         try {
-            const res = await fetch('http://localhost:8000/alerts');
-            if (res.ok) {
-                const data = await res.json();
-                setAlerts(data);
-            }
+            const data = await api.getAlerts();
+            setAlerts(data);
         } catch (err) {
             console.error("Failed to fetch alerts", err);
         }
@@ -82,8 +84,8 @@ export default function ChatInterface() {
         if (refreshingRadar) return;
         setRefreshingRadar(true);
         try {
-            const res = await fetch('http://localhost:8000/radar/check', { method: 'POST' });
-            if (res.ok) await fetchAlerts();
+            await api.checkRadar();
+            await fetchAlerts();
         } catch (e) {
             console.error(e);
         } finally {
@@ -96,8 +98,8 @@ export default function ChatInterface() {
         if (refreshingPolitics) return;
         setRefreshingPolitics(true);
         try {
-            const res = await fetch('http://localhost:8000/politics/check', { method: 'POST' });
-            if (res.ok) await fetchAlerts();
+            await api.checkPolitics();
+            await fetchAlerts();
         } catch (e) {
             console.error(e);
         } finally {
@@ -108,11 +110,8 @@ export default function ChatInterface() {
     // Fetch History
     const fetchHistory = async () => {
         try {
-            const res = await fetch(`http://localhost:8000/history/${DEFAULT_USER_ID}`);
-            if (res.ok) {
-                const data = await res.json();
-                setHistory(data.history || []);
-            }
+            const data = await api.getHistory(DEFAULT_USER_ID);
+            setHistory(data.history || []);
         } catch (err) {
             console.error("Failed to fetch history", err);
         }
@@ -124,14 +123,7 @@ export default function ChatInterface() {
         
         const saveSession = async () => {
             try {
-                await fetch(`http://localhost:8000/history/${DEFAULT_USER_ID}/save`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        messages: messages
-                    })
-                });
+                await api.saveSession(DEFAULT_USER_ID, sessionId, messages);
                 // Refresh history list silently
                 fetchHistory();
             } catch (err) {
@@ -167,16 +159,12 @@ export default function ChatInterface() {
         if (!deleteTarget) return;
 
         try {
-            const res = await fetch(`http://localhost:8000/history/${DEFAULT_USER_ID}/${deleteTarget.id}`, {
-                method: 'DELETE',
-            });
-            if (res.ok) {
-                // Remove from list
-                setHistory(prev => prev.filter(item => item.id !== deleteTarget.id));
-                // If deleted current session, start new chat
-                if (deleteTarget.id === sessionId) {
-                    handleNewChat();
-                }
+            await api.deleteSession(DEFAULT_USER_ID, deleteTarget.id);
+            // Remove from list
+            setHistory(prev => prev.filter(item => item.id !== deleteTarget.id));
+            // If deleted current session, start new chat
+            if (deleteTarget.id === sessionId) {
+                handleNewChat();
             }
         } catch (err) {
             console.error("Failed to delete session", err);
@@ -187,8 +175,7 @@ export default function ChatInterface() {
 
     // Fetch config on mount or when settings close (to update countdown)
     useEffect(() => {
-        fetch('http://localhost:8000/settings')
-            .then(res => res.json())
+        api.getSettings()
             .then(data => {
                 setConfig(data);
                 if (data.general?.exam_date) {
@@ -233,23 +220,7 @@ export default function ChatInterface() {
 
             setIsDocUploading(true);
             try {
-                const formData = new FormData();
-                // 注意：后端改为接收 files 列表，这里 key 必须是 files
-                validFiles.forEach(file => {
-                    formData.append('files', file);
-                });
-                
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-                const res = await fetch(`${apiUrl}/upload`, {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                if (!res.ok) {
-                    throw new Error('文档上传失败');
-                }
-
-                const result = await res.json();
+                const result = await api.uploadDocuments(validFiles);
                 alert(result.message || `成功上传 ${result.count} 个文件并加入知识库！`);
                 
             } catch (err) {
@@ -317,30 +288,12 @@ export default function ChatInterface() {
         if (selectedImage) {
             setIsUploading(true);
             try {
-                const formData = new FormData();
-                formData.append('file', selectedImage);
-
-                // Use NEXT_PUBLIC_API_URL if available, otherwise relative path (assuming proxy) or direct localhost
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-                const res = await fetch(`${apiUrl}/upload/image`, {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                if (!res.ok) {
-                    throw new Error('图片上传失败');
-                }
-
-                const data = await res.json();
+                const data = await api.uploadImage(selectedImage);
                 const ocrText = data.text;
                 const uploadedImageUrl = data.url; // Get persistent URL from backend
                 
                 // We'll append OCR text for the backend context, but we also pass the image URL for VLM support
                 fullMessage = `${input}\n\n[图片内容]\n${ocrText}`;
-                
-                // Update local preview to use the server URL if desired, or keep local blob
-                // const imageUrl = uploadedImageUrl; 
                 
                 // Send both text content and image URL to the hook
                 sendMessage(fullMessage, { web_search_enabled: isWebSearchEnabled, image: uploadedImageUrl });
@@ -370,7 +323,7 @@ export default function ChatInterface() {
                 onClose={() => {
                     setIsSettingsOpen(false);
                     // Refresh config when settings close
-                    fetch('http://localhost:8000/settings').then(res => res.json()).then(setConfig);
+                    api.getSettings().then(setConfig);
                 }} 
             />
 

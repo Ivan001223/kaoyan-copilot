@@ -1,15 +1,30 @@
 import os
 import uvicorn
 import asyncio
+import uuid
+import datetime
+import random
+import requests
 from contextlib import asynccontextmanager
+from typing import List, Dict, Any
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from langserve import add_routes
-from pydantic import BaseModel
-from typing import List, Dict, Any
 import langserve.serialization
+from pydantic import BaseModel
 from langgraph.types import Send
+
+from app.core.graph import app as graph_app
+from app.core.rag_engine import RAGEngine
+from app.core.config_manager import config_manager
+from app.core.model_loader import check_and_download_models
+from app.core.ocr_engine import ocr_engine
+from app.agents.radar_agent import check_school_updates
+from app.agents.politics_agent import check_politics_news
+from app.core.history_manager import history_manager
+from app.core.alert_manager import alert_manager
 
 # --- PATCH: Fix langserve serialization for Send objects and broken default ---
 def custom_default(obj):
@@ -26,10 +41,125 @@ def custom_default(obj):
 langserve.serialization.default = custom_default
 # -----------------------------------------------------------------------------
 
-from app.core.graph import app as graph_app
-from app.core.rag_engine import RAGEngine
-from app.core.config_manager import config_manager
-from app.core.model_loader import check_and_download_models
+async def scheduled_radar_checks():
+    """
+    根据配置运行 Radar Agent 检查。
+    """
+    print("后台调度器已启动：Radar Agent 检查任务。")
+    while True:
+        # 每次循环都重新读取配置，以便动态调整
+        radar_config = config_manager.get_config().get("radar", {})
+        if not radar_config.get("enabled", True):
+            await asyncio.sleep(60)
+            continue
+            
+        schedule_time_str = radar_config.get("schedule_time", "08:00")
+        try:
+            target_hour, target_minute = map(int, schedule_time_str.split(":"))
+        except:
+            target_hour, target_minute = 8, 0
+            
+        now = datetime.datetime.now()
+        target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+        
+        if now >= target_time:
+            # 如果今天已经过了目标时间，安排在明天
+            target_time += datetime.timedelta(days=1)
+            
+        wait_seconds = (target_time - now).total_seconds()
+        # 如果等待时间太长（比如通过配置修改了时间，导致需要等待很久），
+        # 我们每隔一段时间（例如 60s）醒来一次检查配置变更
+        
+        if wait_seconds > 60:
+             await asyncio.sleep(60)
+             continue 
+        
+        # 接近目标时间，进行精确等待
+        if wait_seconds > 0:
+             await asyncio.sleep(wait_seconds)
+        
+        # 再次检查配置，确保未被禁用
+        radar_config = config_manager.get_config().get("radar", {})
+        if not radar_config.get("enabled", True):
+            continue
+
+        # 执行检查
+        try:
+            print(f"--- [Scheduled Task] 开始 Radar 检查 ({datetime.datetime.now()}) ---")
+            default_school = radar_config.get("target_school", "中国科学院大学杭州高等研究所")
+            alert = check_school_updates(default_school)
+            
+            if alert.has_critical_update:
+                print(f"!!! 发现关键更新 !!!\n{alert.message}")
+                # TODO: 这里可以集成推送通知（例如邮件、WebSocket 推送到前端）
+            else:
+                print(f"检查完成。未发现 {default_school} 的新更新。")
+                
+        except Exception as e:
+            print(f"Radar 调度任务出错: {e}")
+            
+        # 避免快速循环，稍微等待一下以越过目标时间
+        await asyncio.sleep(60)
+
+async def scheduled_politics_checks():
+    """
+    根据配置运行 Politics Agent 检查。
+    """
+    print("后台调度器已启动：Politics Agent 检查任务。")
+    while True:
+        politics_config = config_manager.get_config().get("politics", {})
+        if not politics_config.get("enabled", True):
+            await asyncio.sleep(60)
+            continue
+
+        schedule_time_str = politics_config.get("schedule_time", "08:30")
+        try:
+            target_hour, target_minute = map(int, schedule_time_str.split(":"))
+        except:
+            target_hour, target_minute = 8, 30
+
+        now = datetime.datetime.now()
+        target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+        
+        if now >= target_time:
+            target_time += datetime.timedelta(days=1)
+            
+        wait_seconds = (target_time - now).total_seconds()
+        
+        if wait_seconds > 60:
+            await asyncio.sleep(60)
+            continue
+            
+        if wait_seconds > 0:
+            await asyncio.sleep(wait_seconds)
+            
+        politics_config = config_manager.get_config().get("politics", {})
+        if not politics_config.get("enabled", True):
+            continue
+
+        # 执行检查
+        try:
+            print(f"--- [Scheduled Task] 开始 Politics 检查 ({datetime.datetime.now()}) ---")
+            alert = check_politics_news()
+            
+            if alert.has_relevant_news and alert.news_items:
+                print(f"!!! 发现 {len(alert.news_items)} 条重要考研时政 !!!")
+                for item in alert.news_items:
+                    print("-" * 30)
+                    print(f"标题: {item.title}")
+                    print(f"来龙去脉: {item.summary}")
+                    print(f"考点: {item.exam_point}")
+                    if item.source_url:
+                        print(f"来源: {item.source_url}")
+                print("-" * 30)
+                # TODO: 集成推送通知
+            else:
+                print("检查完成。今日无重要考研时政。")
+                
+        except Exception as e:
+            print(f"Politics 调度任务出错: {e}")
+            
+        await asyncio.sleep(60)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,8 +167,6 @@ async def lifespan(app: FastAPI):
     check_and_download_models()
     
     # 启动后台任务
-    # Note: scheduled_radar_checks and scheduled_politics_checks are defined later in this file.
-    # Python allows this forward reference as long as they are defined when lifespan is executed (at startup).
     asyncio.create_task(scheduled_radar_checks())
     asyncio.create_task(scheduled_politics_checks())
     yield
@@ -121,9 +249,6 @@ async def upload_documents(files: List[UploadFile] = File(...)):
         "count": success_count
     }
 
-# 4.1 OCR 上传端点 (新增)
-from app.core.ocr_engine import ocr_engine
-
 @app.post("/upload/image")
 async def upload_image_and_ocr(file: UploadFile = File(...)):
     """
@@ -141,7 +266,6 @@ async def upload_image_and_ocr(file: UploadFile = File(...)):
     os.makedirs(uploads_dir, exist_ok=True)
     
     # Generate unique filename
-    import uuid
     filename = f"{uuid.uuid4()}{ext}"
     file_path = os.path.join(uploads_dir, filename)
     
@@ -181,139 +305,6 @@ async def update_settings(new_config: Dict[str, Any]):
     updated_config = config_manager.update_config(new_config)
     return {"message": "Configuration updated", "config": updated_config}
 
-
-# 4.5 后台调度器 (Radar Agent 自动检查)
-import datetime
-from app.agents.radar_agent import check_school_updates
-
-async def scheduled_radar_checks():
-    """
-    根据配置运行 Radar Agent 检查。
-    """
-    print("后台调度器已启动：Radar Agent 检查任务。")
-    while True:
-        # 每次循环都重新读取配置，以便动态调整
-        radar_config = config_manager.get_config().get("radar", {})
-        if not radar_config.get("enabled", True):
-            await asyncio.sleep(60)
-            continue
-            
-        schedule_time_str = radar_config.get("schedule_time", "08:00")
-        try:
-            target_hour, target_minute = map(int, schedule_time_str.split(":"))
-        except:
-            target_hour, target_minute = 8, 0
-            
-        now = datetime.datetime.now()
-        target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
-        
-        if now >= target_time:
-            # 如果今天已经过了目标时间，安排在明天
-            target_time += datetime.timedelta(days=1)
-            
-        wait_seconds = (target_time - now).total_seconds()
-        # 如果等待时间太长（比如通过配置修改了时间，导致需要等待很久），
-        # 我们每隔一段时间（例如 60s）醒来一次检查配置变更
-        
-        if wait_seconds > 60:
-             await asyncio.sleep(60)
-             continue 
-
-        # 接近目标时间，进行精确等待
-        if wait_seconds > 0:
-             await asyncio.sleep(wait_seconds)
-        
-        # 再次检查配置，确保未被禁用
-        radar_config = config_manager.get_config().get("radar", {})
-        if not radar_config.get("enabled", True):
-            continue
-
-        # 执行检查
-        try:
-            print(f"--- [Scheduled Task] 开始 Radar 检查 ({datetime.datetime.now()}) ---")
-            default_school = radar_config.get("target_school", "中国科学院大学杭州高等研究所")
-            alert = check_school_updates(default_school)
-            
-            if alert.has_critical_update:
-                print(f"!!! 发现关键更新 !!!\n{alert.message}")
-                # TODO: 这里可以集成推送通知（例如邮件、WebSocket 推送到前端）
-            else:
-                print(f"检查完成。未发现 {default_school} 的新更新。")
-                
-        except Exception as e:
-            print(f"Radar 调度任务出错: {e}")
-            
-        # 避免快速循环，稍微等待一下以越过目标时间
-        await asyncio.sleep(60)
-
-# 4.6 后台调度器 (Politics Agent 自动检查)
-from app.agents.politics_agent import check_politics_news
-
-async def scheduled_politics_checks():
-    """
-    根据配置运行 Politics Agent 检查。
-    """
-    print("后台调度器已启动：Politics Agent 检查任务。")
-    while True:
-        politics_config = config_manager.get_config().get("politics", {})
-        if not politics_config.get("enabled", True):
-            await asyncio.sleep(60)
-            continue
-
-        schedule_time_str = politics_config.get("schedule_time", "08:30")
-        try:
-            target_hour, target_minute = map(int, schedule_time_str.split(":"))
-        except:
-            target_hour, target_minute = 8, 30
-
-        now = datetime.datetime.now()
-        target_time = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
-        
-        if now >= target_time:
-            target_time += datetime.timedelta(days=1)
-            
-        wait_seconds = (target_time - now).total_seconds()
-        
-        if wait_seconds > 60:
-            await asyncio.sleep(60)
-            continue
-            
-        if wait_seconds > 0:
-            await asyncio.sleep(wait_seconds)
-            
-        politics_config = config_manager.get_config().get("politics", {})
-        if not politics_config.get("enabled", True):
-            continue
-
-        # 执行检查
-        try:
-            print(f"--- [Scheduled Task] 开始 Politics 检查 ({datetime.datetime.now()}) ---")
-            alert = check_politics_news()
-            
-            if alert.has_relevant_news and alert.news_items:
-                print(f"!!! 发现 {len(alert.news_items)} 条重要考研时政 !!!")
-                for item in alert.news_items:
-                    print("-" * 30)
-                    print(f"标题: {item.title}")
-                    print(f"来龙去脉: {item.summary}")
-                    print(f"考点: {item.exam_point}")
-                    if item.source_url:
-                        print(f"来源: {item.source_url}")
-                print("-" * 30)
-                # TODO: 集成推送通知
-            else:
-                print("检查完成。今日无重要考研时政。")
-                
-        except Exception as e:
-            print(f"Politics 调度任务出错: {e}")
-            
-        await asyncio.sleep(60)
-
-# 5. 历史记录端点
-from app.core.history_manager import history_manager
-from app.core.alert_manager import alert_manager
-import requests
-import random
 
 @app.get("/quote")
 async def get_quote():
@@ -458,6 +449,5 @@ async def delete_history_session(user_id: str, session_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
 
 if __name__ == "__main__":
-    import uvicorn
     # 生产环境中运行：uvicorn server:app --host 0.0.0.0 --port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)
