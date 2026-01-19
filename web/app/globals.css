@@ -75,3 +75,26 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom Scrollbar Utility */
+.hover-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.hover-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hover-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 20px;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1; /* Tailwind gray-300 */
+}
+
+.dark .hover-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: #4b5563; /* Tailwind gray-600 */
+}

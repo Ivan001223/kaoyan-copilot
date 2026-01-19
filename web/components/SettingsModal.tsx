@@ -65,6 +65,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         }));
     };
 
+    const updateLocalModels = (field: string, value: string) => {
+        setConfig((prev: any) => ({
+            ...prev,
+            local_models: { ...prev.local_models, [field]: value },
+        }));
+    };
+
     const updateRadar = (field: string, value: any) => {
         setConfig((prev: any) => ({
             ...prev,
@@ -76,6 +83,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setConfig((prev: any) => ({
             ...prev,
             politics: { ...prev.politics, [field]: value },
+        }));
+    };
+
+    const updateSearch = (field: string, value: string) => {
+        setConfig((prev: any) => ({
+            ...prev,
+            search: { ...prev.search, [field]: value },
         }));
     };
 
@@ -140,6 +154,76 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                             className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all font-mono"
                                         />
                                     </div>
+                                </div>
+                            </section>
+
+                            {/* Local Models Section */}
+                            <section className="space-y-4">
+                                <h3 className="text-sm font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">本地模型设置 (Local Models)</h3>
+                                <div className="grid gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">OCR Model</label>
+                                        <input
+                                            type="text"
+                                            value={config.local_models?.ocr_model || ""}
+                                            onChange={(e) => updateLocalModels("ocr_model", e.target.value)}
+                                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                                            placeholder="Qwen/Qwen2.5-VL-3B-Instruct"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Embedding Model</label>
+                                        <input
+                                            type="text"
+                                            value={config.local_models?.embedding_model || ""}
+                                            onChange={(e) => updateLocalModels("embedding_model", e.target.value)}
+                                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                                            placeholder="Qwen/Qwen3-VL-Embedding-2B"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Rerank Model</label>
+                                        <input
+                                            type="text"
+                                            value={config.local_models?.rerank_model || ""}
+                                            onChange={(e) => updateLocalModels("rerank_model", e.target.value)}
+                                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all"
+                                            placeholder="Qwen/Qwen3-VL-Reranker-2B"
+                                        />
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* Search Engine Section */}
+                            <section className="space-y-4">
+                                <h3 className="text-sm font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">搜索设置 (Search Engine)</h3>
+                                <div className="grid gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Provider</label>
+                                        <select
+                                            value={config.search?.provider || "duckduckgo"}
+                                            onChange={(e) => updateSearch("provider", e.target.value)}
+                                            className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all"
+                                        >
+                                            <option value="duckduckgo">DuckDuckGo (免费/无需 Key)</option>
+                                            <option value="tavily">Tavily (推荐/需要 Key)</option>
+                                        </select>
+                                    </div>
+                                    {config.search?.provider === "tavily" && (
+                                        <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Tavily API Key</label>
+                                            <input
+                                                type="password"
+                                                value={config.search?.tavily_api_key || ""}
+                                                onChange={(e) => updateSearch("tavily_api_key", e.target.value)}
+                                                className="w-full p-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all font-mono"
+                                                placeholder="tvly-..."
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                可在 <a href="https://tavily.com" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">tavily.com</a> 免费获取。
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </section>
 
