@@ -230,3 +230,9 @@ next-env.d.ts
 # User Config
 config.json
 
+# Uploads
+data/uploads/
+
+# History
+data/chat_history.json
+radar_history.json
