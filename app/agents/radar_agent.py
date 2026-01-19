@@ -3,7 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.tools import DuckDuckGoSearchRun
+from app.core.search_tool import get_search_tool
 from app.core.state import AgentState
 
 # 1. 警报数据模型
@@ -11,13 +11,13 @@ class AlertMessage(BaseModel):
     has_critical_update: bool = Field(description="如果存在重磅新闻（例如教学大纲更改、发布考试日期），则为 True。")
     message: str = Field(description="简洁的警报消息，例如“警告：浙大将考试科目更改为 408”。")
     source_url: Optional[str] = Field(description="源 URL（如果可用）。")
-    
+
 # 2. 搜索逻辑
 def check_school_updates(school_name: str) -> AlertMessage:
     """
     检查目标学校研究生招生的最新更新。
     """
-    search_tool = DuckDuckGoSearchRun()
+    search_tool = get_search_tool(return_results_obj=False)
     
     # 计算目标年份（例如，如果今天是 2026-01-14，目标是 2027 年入学）
     # 但是，如果是 2026 年初/中期，人们可能仍在检查 2026 年的成绩或 2027 年的指南。
@@ -59,7 +59,8 @@ def check_school_updates(school_name: str) -> AlertMessage:
         model=llm_config.get("model", "gpt-4o"),
         temperature=0,
         base_url=llm_config.get("base_url"),
-        api_key=llm_config.get("api_key")
+        api_key=llm_config.get("api_key"),
+        streaming=True
     )
     
     # 结构化输出包装器
@@ -142,15 +143,8 @@ class SchoolExtraction(BaseModel):
 def get_radar_node():
     # 初始化用于提取的 LLM
     # 初始化用于提取的 LLM
-    from app.core.config_manager import config_manager
-    llm_config = config_manager.get_config().get("llm", {})
-
-    llm = ChatOpenAI(
-        model=llm_config.get("model", "gpt-4o"),
-        temperature=0, 
-        base_url=llm_config.get("base_url"),
-        api_key=llm_config.get("api_key")
-    )
+    from app.core.llm_factory import get_llm
+    llm = get_llm(temperature=0)
     
     extractor = llm.with_structured_output(SchoolExtraction)
 
@@ -187,13 +181,17 @@ def get_radar_node():
         from langchain_core.messages import AIMessage
         
         response_content = ""
+        sources = []
+        
         if alert.has_critical_update:
-            response_content = f"【{target_school} 监控警报】\n{alert.message} \n(来源: {alert.source_url})"
+            response_content = f"【{target_school} 监控警报】\n{alert.message}"
+            if alert.source_url:
+                 sources.append({"title": "来源链接", "url": alert.source_url, "content": "监控到的更新来源"})
         else:
             response_content = f"目前未发现 {target_school} 的关键更新（招生简章/科目变更）。"
             
         return {
-            "messages": [AIMessage(content=response_content)],
+            "messages": [AIMessage(content=response_content, additional_kwargs={"sources": sources})],
             "context": {"monitored_school": target_school} # 更新上下文
         }
 

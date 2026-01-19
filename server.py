@@ -1,20 +1,54 @@
 import os
 import uvicorn
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from langserve import add_routes
 from pydantic import BaseModel
 from typing import List, Dict, Any
+import langserve.serialization
+from langgraph.types import Send
+
+# --- PATCH: Fix langserve serialization for Send objects and broken default ---
+def custom_default(obj):
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
+    if isinstance(obj, Send):
+        return {"node": obj.node, "arg": obj.arg}
+    if isinstance(obj, Exception):
+        return str(obj)
+    # For other types, we must raise TypeError so orjson can handle it (or fail gracefully)
+    # The original implementation called super().default(obj) which crashed.
+    raise TypeError(f"Type is not JSON serializable: {type(obj)}")
+
+langserve.serialization.default = custom_default
+# -----------------------------------------------------------------------------
 
 from app.core.graph import app as graph_app
 from app.core.rag_engine import RAGEngine
 from app.core.config_manager import config_manager
+from app.core.model_loader import check_and_download_models
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 检查并下载本地模型
+    check_and_download_models()
+    
+    # 启动后台任务
+    # Note: scheduled_radar_checks and scheduled_politics_checks are defined later in this file.
+    # Python allows this forward reference as long as they are defined when lifespan is executed (at startup).
+    asyncio.create_task(scheduled_radar_checks())
+    asyncio.create_task(scheduled_politics_checks())
+    yield
 
 # 1. 初始化 FastAPI
 app = FastAPI(
     title="Kaoyan Copilot API",
     version="1.0",
-    description="Kaoyan Copilot Agent 系统的后端 API"
+    description="Kaoyan Copilot Agent 系统的后端 API",
+    lifespan=lifespan
 )
 
 # 2. CORS 设置
@@ -36,36 +70,56 @@ add_routes(
     enable_feedback_endpoint=True,
 )
 
+# 3.1 静态文件服务 (用于访问上传的文档)
+os.makedirs(os.path.join("data", "documents"), exist_ok=True)
+app.mount("/files", StaticFiles(directory=os.path.join("data", "documents")), name="files")
+
+# 3.2 静态文件服务 (用于访问上传的图片)
+os.makedirs(os.path.join("data", "uploads"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=os.path.join("data", "uploads")), name="uploads")
+
 # 4. RAG 上传端点
 @app.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
+async def upload_documents(files: List[UploadFile] = File(...)):
     """
-    上传 PDF 文件，保存并将其摄取到 RAG 向量存储中。
+    上传多个 PDF 文件，保存并将其摄取到 RAG 向量存储中。
     """
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="仅支持 PDF 文件。")
-        
-    try:
-        # 保存到临时或数据目录
-        upload_dir = os.path.join("data", "documents")
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, file.filename)
-        
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+    upload_dir = os.path.join("data", "documents")
+    os.makedirs(upload_dir, exist_ok=True)
+    rag = RAGEngine()
+    
+    results = []
+    success_count = 0
+
+    for file in files:
+        if not file.filename.endswith('.pdf'):
+            results.append({"filename": file.filename, "status": "skipped", "message": "仅支持 PDF"})
+            continue
             
-        # 触发摄取
-        rag = RAGEngine()
-        success = rag.add_knowledge_base(file_path)
-        
-        if success:
-            return {"message": "文件上传并索引成功。", "filename": file.filename}
-        else:
-            raise HTTPException(status_code=500, detail="文档索引失败。")
+        try:
+            file_path = os.path.join(upload_dir, file.filename)
             
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+                
+            # 触发摄取
+            success = rag.add_knowledge_base(file_path)
+            
+            if success:
+                success_count += 1
+                results.append({"filename": file.filename, "status": "success"})
+            else:
+                results.append({"filename": file.filename, "status": "failed", "message": "索引失败"})
+                
+        except Exception as e:
+            results.append({"filename": file.filename, "status": "error", "message": str(e)})
+            
+    return {
+        "message": f"处理完成: 成功 {success_count}/{len(files)}", 
+        "results": results,
+        "count": success_count
+    }
 
 # 4.1 OCR 上传端点 (新增)
 from app.core.ocr_engine import ocr_engine
@@ -73,7 +127,7 @@ from app.core.ocr_engine import ocr_engine
 @app.post("/upload/image")
 async def upload_image_and_ocr(file: UploadFile = File(...)):
     """
-    上传图片并进行 OCR 识别，返回识别出的文本。
+    上传图片，保存并返回图片的 URL (以及 OCR 文本作为备用)。
     """
     # 允许的图片扩展名
     allowed_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp', '.pdf'}
@@ -82,33 +136,38 @@ async def upload_image_and_ocr(file: UploadFile = File(...)):
     if ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: {ext}")
 
-    temp_file_path = ""
+    # Ensure uploads directory exists
+    uploads_dir = os.path.join("data", "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    # Generate unique filename
+    import uuid
+    filename = f"{uuid.uuid4()}{ext}"
+    file_path = os.path.join(uploads_dir, filename)
+    
+    # Save file persistently
     try:
-        # 保存到临时文件
-        import tempfile
-        # 创建一个带后缀的临时文件，但不自动删除，因为我们需要传递路径给 ocr_engine
-        # ocr_engine 内部可能会产生新的临时文件，但它是安全的
-        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        with open(file_path, "wb") as f:
             content = await file.read()
-            tmp.write(content)
-            temp_file_path = tmp.name
+            f.write(content)
+            
+        # Call OCR engine for text extraction (as a fallback/supplement)
+        print(f"正在处理 OCR 图片: {file_path}")
+        extracted_text = ocr_engine.process_file(file_path)
         
-        # 调用 OCR 引擎
-        print(f"正在处理 OCR 图片: {temp_file_path}")
-        extracted_text = ocr_engine.process_file(temp_file_path)
+        # Return URL for the frontend to use in multimodal messages
+        # Assuming app is mounted at root and "uploads" static mount (we need to add this mount)
+        image_url = f"http://localhost:8000/uploads/{filename}"
         
-        return {"filename": file.filename, "text": extracted_text}
+        return {
+            "filename": filename, 
+            "text": extracted_text,
+            "url": image_url
+        }
         
     except Exception as e:
-        print(f"OCR 处理失败: {e}")
-        raise HTTPException(status_code=500, detail=f"OCR 处理失败: {str(e)}")
-    finally:
-        # 清理临时上传文件
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except:
-                pass
+        print(f"图片处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"图片处理失败: {str(e)}")
 
 # 4.2 设置端点
 @app.get("/settings")
@@ -124,7 +183,6 @@ async def update_settings(new_config: Dict[str, Any]):
 
 
 # 4.5 后台调度器 (Radar Agent 自动检查)
-import asyncio
 import datetime
 from app.agents.radar_agent import check_school_updates
 
@@ -250,11 +308,6 @@ async def scheduled_politics_checks():
             print(f"Politics 调度任务出错: {e}")
             
         await asyncio.sleep(60)
-
-@app.on_event("startup")
-async def start_scheduler():
-    asyncio.create_task(scheduled_radar_checks())
-    asyncio.create_task(scheduled_politics_checks())
 
 # 5. 历史记录端点
 from app.core.history_manager import history_manager

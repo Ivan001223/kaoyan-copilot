@@ -48,10 +48,19 @@ class HistoryManager:
         # If session exists, update it
         if session_id in data[user_id]:
             session = data[user_id][session_id]
+            # 只有当消息数量增加时（即产生了新对话），才更新 updated_at
+            # 前端自动保存可能会频繁调用，但如果只是加载历史记录点击查看，不应更新时间戳
+            # 简单的判断逻辑：如果传入的 messages 长度比已存的长，或者是全新的会话，才更新时间
+            old_len = len(session.get("messages", []))
+            new_len = len(messages)
+            
             session["messages"] = messages
-            session["updated_at"] = now
             if title:
                 session["title"] = title
+                
+            # 只有产生新内容时才置顶 (更新 updated_at)
+            if new_len > old_len:
+                session["updated_at"] = now
         else:
             # Create new session
             # Auto-generate title if not provided

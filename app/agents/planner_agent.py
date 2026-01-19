@@ -27,19 +27,18 @@ def get_planner_node():
     """
     # 初始化 LLM
     # 初始化 LLM
-    from app.core.config_manager import config_manager
-    llm_config = config_manager.get_config().get("llm", {})
-
-    llm = ChatOpenAI(
-        model=llm_config.get("model", "gpt-4o"),
-        temperature=0,
-        base_url=llm_config.get("base_url"),
-        api_key=llm_config.get("api_key")
-    )
+    from app.core.llm_factory import get_llm
+    llm = get_llm(temperature=0)
     
     # 强制结构化输出
-    structured_llm = llm.with_structured_output(Schedule)
-
+    # 注意：LocalQwen2VL 可能不支持 with_structured_output，需要降级处理
+    try:
+        structured_llm = llm.with_structured_output(Schedule)
+    except NotImplementedError:
+        # Fallback for models that don't support structured output natively
+        # We will ask for JSON in the prompt and parse it manually
+        structured_llm = llm 
+    
     # 系统提示
     system_template = """你是考研资深教务主任（Senior Academic Dean）。
     你的目标是根据用户的情况创建或调整学习计划。
@@ -53,11 +52,28 @@ def get_planner_node():
     1. 严谨且现实。时间分配必须合理。
     2. 关注用户的“弱项”。
     3. 如果有现有计划，请根据用户的请求对其进行修改（例如“推迟任务”或“添加新任务”）。
-    4. 输出必须是具有特定字段的结构化 JSON。
+    4. 必须输出符合以下 JSON Schema 的 JSON 对象：
+    {{
+        "tasks": [
+            {{
+                "date": "YYYY-MM-DD",
+                "subject": "科目名称",
+                "task_content": "任务详情",
+                "estimated_hours": 2.5,
+                "priority": "高/中/低"
+            }}
+        ]
+    }}
     5. 如果用户说“今天没完成任务”，你必须将未完成的任务重新安排到未来的日期，并提高优先级。
+    6. 不要输出任何额外的解释文本，只输出 JSON。
     """
     
-    prompt = ChatPromptTemplate.from_template(system_template)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_template),
+        ("human", "{input}")
+    ])
+    
+    # 链
     chain = prompt | structured_llm
 
     def planner_node(state: AgentState):
@@ -81,17 +97,47 @@ def get_planner_node():
         import datetime
         current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        schedule_obj = chain.invoke({
-            "input": user_input, 
-            "current_time": current_time,
-            "existing_plan_context": existing_plan_str
-        })
+        try:
+            response = chain.invoke({
+                "input": user_input, 
+                "current_time": current_time,
+                "existing_plan_context": existing_plan_str
+            })
+            
+            # Handle different response types (Object vs AIMessage)
+            if isinstance(response, Schedule):
+                schedule_obj = response
+            else:
+                # Manual parsing for Local LLM
+                content = response.content
+                import json
+                import re
+                
+                # Strip markdown code blocks
+                content = re.sub(r'```json\s*', '', content)
+                content = re.sub(r'```', '', content)
+                content = content.strip()
+                
+                try:
+                    data = json.loads(content)
+                    schedule_obj = Schedule(**data)
+                except Exception as e:
+                    print(f"Failed to parse Planner JSON: {e}, content: {content[:100]}...")
+                    # Fallback empty schedule
+                    schedule_obj = Schedule(tasks=[])
+
+        except Exception as e:
+            print(f"Planner Chain Error: {e}")
+            schedule_obj = Schedule(tasks=[])
         
         # 3. 持久化保存到 Context
         # 我们将更新后的计划存回 state.context
         # 注意：LangGraph 的 state 更新通常是浅合并，对于嵌套字典需要小心。
         # 这里我们返回 clear 的 key update。
-        new_plan_dict = schedule_obj.model_dump()
+        if schedule_obj:
+            new_plan_dict = schedule_obj.model_dump()
+        else:
+            new_plan_dict = {}
         
         # 4. 生成回复
         # 不再直接甩 CSV，而是生成一段友好的总结，并告知计划已更新

@@ -23,6 +23,8 @@ fpdf
 docx2txt
 openpyxl
 pandas
+addict
+easydict
 
 # Search
 duckduckgo-search
@@ -38,6 +40,8 @@ timm
 pillow
 pdf2image
 torch
+torchvision
+matplotlib
 
 # UI
 streamlit

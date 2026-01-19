@@ -26,8 +26,8 @@ class RAGEngine:
     def __init__(self, persist_directory: str = VECTOR_STORE_PATH):
         self.persist_directory = persist_directory
         
-        # Initialize Embeddings (Local Qwen3-VL)
-        print("Initializing RAG Engine with Local Qwen3-VL models...")
+        # Initialize Embeddings (Local Model)
+        print("Initializing RAG Engine with Local Embedding models...")
         self.embeddings = Qwen3VLEmbeddings()
         
         # Initialize Reranker
@@ -64,7 +64,7 @@ class RAGEngine:
         
         try:
             if ext in [".pdf", ".png", ".jpg", ".jpeg", ".webp", ".tiff", ".bmp"]:
-                print(f"Using DeepSeek-OCR for {file_path}...")
+                print(f"Using Local OCR for {file_path}...")
                 text = ocr_engine.process_file(file_path)
                 if text:
                     docs = [Document(page_content=text, metadata={"source": file_path})]
