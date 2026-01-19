@@ -3,6 +3,7 @@ import torch
 from typing import List, Any
 from langchain_core.embeddings import Embeddings
 from transformers import AutoModel, AutoProcessor
+from app.core.config_manager import config_manager
 
 class Qwen3VLEmbeddings(Embeddings):
     """
@@ -10,14 +11,19 @@ class Qwen3VLEmbeddings(Embeddings):
     """
     def __init__(self, model_name: str = None):
         # 1. Try env var path
-        # 2. Fallback to passed arg
-        # 3. Fallback to HF Hub ID
+        # 2. Try config manager
+        # 3. Fallback to passed arg
+        # 4. Fallback to HF Hub ID
         
         env_path = os.getenv("MODEL_PATH_EMBEDDING")
+        config_model = config_manager.get("local_models", "embedding_model")
+        
         if env_path and os.path.exists(env_path):
-             self.model_name = env_path
+            self.model_name = env_path
+        elif config_model:
+            self.model_name = config_model
         else:
-             self.model_name = model_name or "Qwen/Qwen3-VL-Embedding-2B"
+            self.model_name = model_name or "Qwen/Qwen3-VL-Embedding-2B"
              
         self._model = None
         self._processor = None

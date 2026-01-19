@@ -3,11 +3,19 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css'; // Formula styles
-import { Send, User, Bot, Loader2, History, Camera, Settings, X, ChevronRight, Square, Image as ImageIcon, Plus, MessageSquare, Trash2, RefreshCw, List } from 'lucide-react';
-import ReasoningBubble from './ReasoningBubble';
+import { 
+    Send, User, Bot, Loader2, History, Camera, Settings, X, ChevronRight, Square, 
+    Image as ImageIcon, Plus, MessageSquare, Trash2, RefreshCw, List, FileText, 
+    Globe, Link as LinkIcon 
+} from 'lucide-react';
+
 import { useLLMStream, Message } from '@/hooks/useLLMStream';
+import { api } from '@/services/api';
+import ReasoningBubble from './ReasoningBubble';
+import TypewriterText from './TypewriterText';
 import SettingsModal from './SettingsModal';
 import AlertHistoryModal from './AlertHistoryModal';
 
@@ -19,7 +27,10 @@ export default function ChatInterface() {
     const [input, setInput] = React.useState('');
     const [selectedImage, setSelectedImage] = React.useState<File | null>(null);
     const [isUploading, setIsUploading] = React.useState(false);
+    const [isDocUploading, setIsDocUploading] = React.useState(false);
+    const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
     const [config, setConfig] = useState<any>(null);
     const [daysLeft, setDaysLeft] = useState<number | null>(null);
     const [alerts, setAlerts] = useState<any>(null);
@@ -33,6 +44,7 @@ export default function ChatInterface() {
     // History State
     const [history, setHistory] = useState<any[]>([]);
     const [sessionId, setSessionId] = useState<string>('');
+    const [deleteTarget, setDeleteTarget] = useState<any>(null);
     const DEFAULT_USER_ID = "default_user"; // Mock user ID
 
     const [quote, setQuote] = useState("星光不问赶路人，时光不负有心人。");
@@ -49,8 +61,7 @@ export default function ChatInterface() {
         // Fetch Quote from Backend (Prevent double fetch in Strict Mode)
         if (!quoteFetchedRef.current) {
             quoteFetchedRef.current = true;
-            fetch('http://localhost:8000/quote')
-                .then(res => res.json())
+            api.getQuote()
                 .then(data => {
                     if (data.quote) setQuote(data.quote);
                 })
@@ -61,11 +72,8 @@ export default function ChatInterface() {
     // Fetch Alerts
     const fetchAlerts = async () => {
         try {
-            const res = await fetch('http://localhost:8000/alerts');
-            if (res.ok) {
-                const data = await res.json();
-                setAlerts(data);
-            }
+            const data = await api.getAlerts();
+            setAlerts(data);
         } catch (err) {
             console.error("Failed to fetch alerts", err);
         }
@@ -76,8 +84,8 @@ export default function ChatInterface() {
         if (refreshingRadar) return;
         setRefreshingRadar(true);
         try {
-            const res = await fetch('http://localhost:8000/radar/check', { method: 'POST' });
-            if (res.ok) await fetchAlerts();
+            await api.checkRadar();
+            await fetchAlerts();
         } catch (e) {
             console.error(e);
         } finally {
@@ -90,8 +98,8 @@ export default function ChatInterface() {
         if (refreshingPolitics) return;
         setRefreshingPolitics(true);
         try {
-            const res = await fetch('http://localhost:8000/politics/check', { method: 'POST' });
-            if (res.ok) await fetchAlerts();
+            await api.checkPolitics();
+            await fetchAlerts();
         } catch (e) {
             console.error(e);
         } finally {
@@ -102,11 +110,8 @@ export default function ChatInterface() {
     // Fetch History
     const fetchHistory = async () => {
         try {
-            const res = await fetch(`http://localhost:8000/history/${DEFAULT_USER_ID}`);
-            if (res.ok) {
-                const data = await res.json();
-                setHistory(data.history || []);
-            }
+            const data = await api.getHistory(DEFAULT_USER_ID);
+            setHistory(data.history || []);
         } catch (err) {
             console.error("Failed to fetch history", err);
         }
@@ -118,14 +123,7 @@ export default function ChatInterface() {
         
         const saveSession = async () => {
             try {
-                await fetch(`http://localhost:8000/history/${DEFAULT_USER_ID}/save`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        messages: messages
-                    })
-                });
+                await api.saveSession(DEFAULT_USER_ID, sessionId, messages);
                 // Refresh history list silently
                 fetchHistory();
             } catch (err) {
@@ -150,32 +148,34 @@ export default function ChatInterface() {
         setSessionId(session.id);
     };
 
-    // Handle Delete Session
-    const handleDeleteSession = async (e: React.MouseEvent, session: any) => {
+    // Handle Delete Session (Trigger Modal)
+    const handleDeleteSession = (e: React.MouseEvent, session: any) => {
         e.stopPropagation();
-        if (!confirm('确定要删除这条对话记录吗？')) return;
+        setDeleteTarget(session);
+    };
+
+    // Confirm Delete Action
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
 
         try {
-            const res = await fetch(`http://localhost:8000/history/${DEFAULT_USER_ID}/${session.id}`, {
-                method: 'DELETE',
-            });
-            if (res.ok) {
-                // Remove from list
-                setHistory(prev => prev.filter(item => item.id !== session.id));
-                // If deleted current session, start new chat
-                if (session.id === sessionId) {
-                    handleNewChat();
-                }
+            await api.deleteSession(DEFAULT_USER_ID, deleteTarget.id);
+            // Remove from list
+            setHistory(prev => prev.filter(item => item.id !== deleteTarget.id));
+            // If deleted current session, start new chat
+            if (deleteTarget.id === sessionId) {
+                handleNewChat();
             }
         } catch (err) {
             console.error("Failed to delete session", err);
+        } finally {
+            setDeleteTarget(null);
         }
     };
 
     // Fetch config on mount or when settings close (to update countdown)
     useEffect(() => {
-        fetch('http://localhost:8000/settings')
-            .then(res => res.json())
+        api.getSettings()
             .then(data => {
                 setConfig(data);
                 if (data.general?.exam_date) {
@@ -190,17 +190,84 @@ export default function ChatInterface() {
     }, [isSettingsOpen]);
 
     const scrollRef = useRef<HTMLDivElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);    // For Gallery
+    const cameraInputRef = useRef<HTMLInputElement>(null);  // For Camera
+    const docInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setSelectedImage(e.target.files[0]);
         }
+        // Reset value to allow selecting the same file again if needed
+        e.target.value = '';
     };
 
+    const handleDocSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const files = Array.from(e.target.files);
+            
+            // 过滤非 PDF 文件
+            const validFiles = files.filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
+            
+            if (validFiles.length === 0) {
+                alert('请至少选择一个 PDF 文件');
+                return;
+            }
+
+            if (validFiles.length < files.length) {
+                alert(`已自动忽略 ${files.length - validFiles.length} 个非 PDF 文件`);
+            }
+
+            setIsDocUploading(true);
+            try {
+                const result = await api.uploadDocuments(validFiles);
+                alert(result.message || `成功上传 ${result.count} 个文件并加入知识库！`);
+                
+            } catch (err) {
+                console.error("Doc upload failed", err);
+                alert("文档上传失败，请稍后重试。");
+            } finally {
+                setIsDocUploading(false);
+                if (docInputRef.current) docInputRef.current.value = '';
+            }
+        }
+    };
+
+    // Close Plus Menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (!target.closest('.plus-menu-container')) {
+                setIsPlusMenuOpen(false);
+            }
+        };
+
+        if (isPlusMenuOpen) {
+            document.addEventListener('click', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [isPlusMenuOpen]);
+
     const handleCameraClick = () => {
+        setIsPlusMenuOpen(false);
+        if (cameraInputRef.current) {
+            cameraInputRef.current.click();
+        }
+    };
+
+    const handleGalleryClick = () => {
+        setIsPlusMenuOpen(false);
         if (fileInputRef.current) {
             fileInputRef.current.click();
+        }
+    };
+
+    const handleDocClick = () => {
+        setIsPlusMenuOpen(false);
+        if (docInputRef.current) {
+            docInputRef.current.click();
         }
     };
 
@@ -221,36 +288,29 @@ export default function ChatInterface() {
         if (selectedImage) {
             setIsUploading(true);
             try {
-                const formData = new FormData();
-                formData.append('file', selectedImage);
-
-                // Use NEXT_PUBLIC_API_URL if available, otherwise relative path (assuming proxy) or direct localhost
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-                const res = await fetch(`${apiUrl}/upload/image`, {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                if (!res.ok) {
-                    throw new Error('图片上传失败');
-                }
-
-                const data = await res.json();
+                const data = await api.uploadImage(selectedImage);
                 const ocrText = data.text;
-
+                const uploadedImageUrl = data.url; // Get persistent URL from backend
+                
+                // We'll append OCR text for the backend context, but we also pass the image URL for VLM support
                 fullMessage = `${input}\n\n[图片内容]\n${ocrText}`;
+                
+                // Send both text content and image URL to the hook
+                sendMessage(fullMessage, { web_search_enabled: isWebSearchEnabled, image: uploadedImageUrl });
+                setInput('');
+                setSelectedImage(null);
+                return; // Exit here as we called sendMessage
 
             } catch (err) {
                 console.error("Upload failed", err);
                 alert("图片处理失败，但这不影响文字发送。");
             } finally {
                 setIsUploading(false);
-                setSelectedImage(null);
             }
         }
-
-        sendMessage(fullMessage);
+        
+        // Normal text message sending (no image)
+        sendMessage(fullMessage, { web_search_enabled: isWebSearchEnabled });
         setInput('');
     };
 
@@ -263,7 +323,7 @@ export default function ChatInterface() {
                 onClose={() => {
                     setIsSettingsOpen(false);
                     // Refresh config when settings close
-                    fetch('http://localhost:8000/settings').then(res => res.json()).then(setConfig);
+                    api.getSettings().then(setConfig);
                 }} 
             />
 
@@ -275,6 +335,32 @@ export default function ChatInterface() {
                 data={alerts}
             />
 
+            {/* Delete Confirmation Modal */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform transition-all scale-100">
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">删除确认</h3>
+                        <p className="text-sm text-gray-500 mb-6">
+                            确定要删除对话 "{deleteTarget.title || "无标题对话"}" 吗？此操作无法撤销。
+                        </p>
+                        <div className="flex justify-end space-x-3">
+                            <button
+                                onClick={() => setDeleteTarget(null)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={confirmDelete}
+                                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors"
+                            >
+                                确定删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Sidebar */}
             <aside className="w-72 bg-white border-r border-gray-200 hidden md:flex flex-col flex-shrink-0 z-20">
                 <div className="px-6 pt-6 pb-2 flex items-center space-x-3">
@@ -284,7 +370,7 @@ export default function ChatInterface() {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2">
+                <div className="flex-1 flex flex-col min-h-0 px-4 py-2 space-y-2">
                     <div className="px-2 py-2">
                         <button
                             onClick={handleNewChat}
@@ -306,10 +392,10 @@ export default function ChatInterface() {
                         </div>
                     </div>
 
-                    <div className="px-2">
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-2">历史记录</h3>
+                    <div className="px-2 flex-1 flex flex-col min-h-0">
+                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 mt-2 flex-shrink-0">历史记录</h3>
                         {/* History items */}
-                        <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                        <div className="space-y-1 flex-1 overflow-y-auto hover-scrollbar pr-1">
                             {history.length > 0 ? (
                                 history.map((session) => (
                                     <div
@@ -519,17 +605,24 @@ export default function ChatInterface() {
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg">
                                         {[
-                                            "📅 为我也生成一份数学复习计划",
-                                            "🏫 帮我分析一下浙江大学计算机",
-                                            "📚 考研英语一和英语二的区别？",
-                                            "💪 我感觉复习不下去了，由于..."
-                                        ].map((text, i) => (
+                                            { text: "📅 为我也生成一份数学复习计划", search: false },
+                                            { text: "🏫 帮我分析一下浙江大学计算机", search: true },
+                                            { text: "📚 考研英语一和英语二的区别？", search: true },
+                                            { text: "💪 我感觉复习不下去了，由于...", search: false }
+                                        ].map((item, i) => (
                                             <button
                                                 key={i}
-                                                onClick={() => sendMessage(text.substring(2))}
+                                                onClick={() => {
+                                                    // If the preset requires search, force it on; otherwise use current setting or default
+                                                    const shouldSearch = item.search || isWebSearchEnabled;
+                                                    // Optionally update the UI toggle too if we want to reflect it
+                                                    if (item.search && !isWebSearchEnabled) setIsWebSearchEnabled(true);
+                                                    
+                                                    sendMessage(item.text.substring(2), { web_search_enabled: shouldSearch });
+                                                }}
                                                 className="px-4 py-3 bg-white border border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm text-gray-700 text-left flex items-center justify-between group"
                                             >
-                                                <span>{text}</span>
+                                                <span>{item.text}</span>
                                                 <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-all" />
                                             </button>
                                         ))}
@@ -563,24 +656,51 @@ export default function ChatInterface() {
                                             {/* Reasoning Display */}
                                             {msg.role === 'assistant' && (
                                                 <>
-                                                    {msg.reasoning ? (
-                                                        <ReasoningBubble content={msg.reasoning} />
-                                                    ) : (
-                                                        isLoading && index === messages.length - 1 && msg.content.length === 0 && (
-                                                            <div className="flex items-center gap-2 text-gray-400 text-xs mb-2 animate-pulse">
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                                <span>正在深度思考...</span>
-                                                            </div>
-                                                        )
-                                                    )}
+                                                    {/* Check for <think> tags in content */}
+                                                    {(() => {
+                                                        const thinkMatch = msg.content.match(/<think>([\s\S]*?)<\/think>/);
+                                                        const partialThinkMatch = !thinkMatch && msg.content.match(/<think>([\s\S]*)/);
+                                                        
+                                                        // Combined reasoning from orchestrator (msg.reasoning) AND model chain-of-thought (<think>)
+                                                        const combinedReasoning = [
+                                                            msg.reasoning, 
+                                                            thinkMatch ? thinkMatch[1] : (partialThinkMatch ? partialThinkMatch[1] : null)
+                                                        ].filter(Boolean).join('\n\n---\n\n');
+
+                                                        if (combinedReasoning) {
+                                                            return <ReasoningBubble content={combinedReasoning} />;
+                                                        } else if (isLoading && index === messages.length - 1 && msg.content.length === 0) {
+                                                            return (
+                                                                <div className="flex items-center gap-2 text-gray-400 text-xs mb-2 animate-pulse">
+                                                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    <span>正在深度思考...</span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
                                                 </>
                                             )}
                                             {msg.role === 'user' ? (
-                                                <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
+                                                <div className="flex flex-col gap-2">
+                                                    {msg.image && (
+                                                        <img 
+                                                            src={msg.image} 
+                                                            alt="User Upload" 
+                                                            className="max-w-full rounded-lg border border-gray-700/50 mb-2 max-h-64 object-contain bg-black/20"
+                                                        />
+                                                    )}
+                                                    <p className="whitespace-pre-wrap font-medium">
+                                                        {msg.image 
+                                                            ? msg.content.replace(/\n\n\[图片内容\][\s\S]*/, '') // Hide OCR text if image exists
+                                                            : msg.content
+                                                        }
+                                                    </p>
+                                                </div>
                                             ) : (
                                                 <>
                                                     <ReactMarkdown
-                                                        remarkPlugins={[remarkMath]}
+                                                        remarkPlugins={[remarkMath, remarkGfm]}
                                                         rehypePlugins={[rehypeKatex]}
                                                         className="prose prose-sm prose-neutral max-w-none dark:prose-invert break-words"
                                                         components={{
@@ -611,8 +731,46 @@ export default function ChatInterface() {
                                                             }
                                                         }}
                                                     >
-                                                        {msg.content}
+                                                        {/* Strip <think> tags for main content display */}
+                                                        {msg.content.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*/g, '')}
                                                     </ReactMarkdown>
+                                                    
+                                                    {/* Blinking Cursor for active generation */}
+                                                    {isLoading && index === messages.length - 1 && (
+                                                        <span className="inline-block w-1.5 h-4 ml-1 bg-blue-500 animate-pulse align-middle"></span>
+                                                    )}
+                                                    
+                                                    {/* Sources Display */}
+                                                    {msg.sources && msg.sources.length > 0 && (
+                                                        <div className="mt-4 pt-3 border-t border-gray-100">
+                                                            <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                                <LinkIcon className="w-3 h-3" />
+                                                                参考来源
+                                                            </div>
+                                                            <div className="max-h-40 overflow-y-auto pr-1 space-y-1 hover-scrollbar">
+                                                                {msg.sources.map((source, idx) => (
+                                                                    <a 
+                                                                        key={idx}
+                                                                        href={source.url}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 hover:bg-blue-50 border border-transparent hover:border-blue-100 transition-all group"
+                                                                    >
+                                                                        <div className="flex-shrink-0 w-4 h-4 rounded bg-white border border-gray-100 flex items-center justify-center text-[10px] font-bold text-gray-400 group-hover:text-blue-500 group-hover:border-blue-200">
+                                                                            {idx + 1}
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <p className="text-xs text-gray-700 truncate group-hover:text-blue-700">
+                                                                                {source.title || "未知来源"}
+                                                                            </p>
+                                                                        </div>
+                                                                        <Globe className="w-3 h-3 text-gray-300 group-hover:text-blue-400 flex-shrink-0" />
+                                                                    </a>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     <div className="mt-2 pt-2 border-t border-gray-100/50">
                                                         <p className="text-[10px] text-gray-400 flex items-center gap-1">
                                                             <span className="inline-block w-1 h-1 rounded-full bg-gray-300"></span>
@@ -666,7 +824,7 @@ export default function ChatInterface() {
                             )}
 
                             <form onSubmit={handleSubmit} className="relative flex items-end gap-2 bg-white rounded-2xl border border-gray-200 shadow-xl shadow-blue-900/5 p-2 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400 transition-all">
-                                {/* File Input (Hidden) */}
+                                {/* Hidden Inputs */}
                                 <input
                                     type="file"
                                     accept="image/*"
@@ -674,28 +832,101 @@ export default function ChatInterface() {
                                     className="hidden"
                                     onChange={handleFileSelect}
                                 />
-
-                                {/* Camera Button */}
-                                <button
-                                    type="button"
-                                    onClick={handleCameraClick}
-                                    className="p-3 text-gray-500 hover:bg-gray-50 hover:text-blue-600 rounded-xl transition-all"
-                                    title="上传图片"
-                                    disabled={isLoading || isUploading}
-                                >
-                                    <Camera className="w-5 h-5" />
-                                </button>
-
                                 <input
-                                    type="text"
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    ref={cameraInputRef}
+                                    className="hidden"
+                                    onChange={handleFileSelect}
+                                />
+                                <input
+                                    type="file"
+                                    accept=".pdf"
+                                    ref={docInputRef}
+                                    className="hidden"
+                                    multiple
+                                     onChange={handleDocSelect}
+                                 />
+
+                                 {/* Plus Menu Button */}
+                                 <div className="relative plus-menu-container">
+                                     {isPlusMenuOpen && (
+                                         <div className="absolute bottom-14 left-0 bg-white border border-gray-100 rounded-xl shadow-xl p-2 min-w-[140px] flex flex-col gap-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                                             <button
+                                                 type="button"
+                                                 onClick={handleCameraClick}
+                                                 className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 rounded-lg text-sm text-gray-700 transition-colors text-left"
+                                             >
+                                                 <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                                                     <Camera className="w-4 h-4" />
+                                                 </div>
+                                                 <span>拍摄照片</span>
+                                             </button>
+                                             
+                                             <button
+                                                 type="button"
+                                                 onClick={handleGalleryClick}
+                                                 className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 rounded-lg text-sm text-gray-700 transition-colors text-left"
+                                             >
+                                                  <div className="p-1.5 bg-green-50 text-green-600 rounded-lg">
+                                                     <ImageIcon className="w-4 h-4" />
+                                                  </div>
+                                                 <span>相册选择</span>
+                                             </button>
+                                             
+                                             <button
+                                                 type="button"
+                                                 onClick={handleDocClick}
+                                                 className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 rounded-lg text-sm text-gray-700 transition-colors text-left"
+                                             >
+                                                  <div className="p-1.5 bg-orange-50 text-orange-600 rounded-lg">
+                                                     {isDocUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                                                  </div>
+                                                 <span>上传文档</span>
+                                             </button>
+                                         </div>
+                                     )}
+                                     
+                                     <button
+                                         type="button"
+                                         onClick={() => setIsPlusMenuOpen(!isPlusMenuOpen)}
+                                         className={cn(
+                                             "p-3 rounded-xl transition-all",
+                                             isPlusMenuOpen ? "bg-gray-100 text-gray-900 rotate-45" : "text-gray-500 hover:bg-gray-50 hover:text-blue-600"
+                                         )}
+                                         title="更多功能"
+                                         disabled={isLoading || isUploading || isDocUploading}
+                                     >
+                                         <Plus className="w-5 h-5 transition-transform duration-200" />
+                                     </button>
+                                 </div>
+
+                                 <input
+                                     type="text"
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     placeholder="输入你的问题..."
                                     className="flex-1 bg-transparent border-none py-3 px-2 text-sm focus:ring-0 placeholder:text-gray-400 text-gray-800"
-                                    disabled={isLoading || isUploading}
+                                    disabled={isLoading || isUploading || isDocUploading}
                                 />
 
-                                <div className="flex items-center pb-0.5">
+                                <div className="flex items-center pb-0.5 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsWebSearchEnabled(!isWebSearchEnabled)}
+                                        className={cn(
+                                            "p-2.5 rounded-xl transition-all shadow-md flex-shrink-0 flex items-center justify-center",
+                                            isWebSearchEnabled
+                                                ? "bg-blue-400 text-white"
+                                                : "text-gray-500 hover:bg-gray-100"
+                                        )}
+                                        title={isWebSearchEnabled ? "已开启联网搜索" : "点击开启联网搜索"}
+                                        disabled={isLoading}
+                                    >
+                                        <Globe className="w-5 h-5" />
+                                    </button>
+
                                     <button
                                         type={isLoading ? "button" : "submit"}
                                         onClick={(e) => {

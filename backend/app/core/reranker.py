@@ -3,15 +3,22 @@ import torch
 from transformers import AutoModel, AutoProcessor
 from typing import List, Tuple, Any
 
+from app.core.config_manager import config_manager
+
 class Qwen3VLReranker:
     def __init__(self, model_name: str = None):
         # 1. Try env var path
-        # 2. Fallback to passed arg
-        # 3. Fallback to HF Hub ID
+        # 2. Try config manager
+        # 3. Fallback to passed arg
+        # 4. Fallback to HF Hub ID
         
         env_path = os.getenv("MODEL_PATH_RERANKER")
+        config_model = config_manager.get("local_models", "rerank_model")
+        
         if env_path and os.path.exists(env_path):
              self.model_name = env_path
+        elif config_model:
+             self.model_name = config_model
         else:
              self.model_name = model_name or "Qwen/Qwen3-VL-Reranker-2B"
              

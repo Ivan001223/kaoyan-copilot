@@ -1,6 +1,6 @@
 import os
 import argparse
-from app.agents.tutor_agent import ingest_documents
+from app.core.rag_engine import rag_engine
 
 def main():
     parser = argparse.ArgumentParser(description="将 PDF 文件摄取到 Kaoyan Copilot 向量存储中。")
@@ -16,7 +16,7 @@ def main():
         
     print(f"正在摄取 '{pdf_path}'...")
     try:
-        ingest_documents(pdf_path)
+        rag_engine.add_knowledge_base(pdf_path)
         print("完成！")
     except Exception as e:
         print(f"发生错误: {e}")

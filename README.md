@@ -22,7 +22,7 @@
 
 - **后端**: Python 3.11, FastAPI, LangChain, LangGraph
 - **前端**: Next.js 14 (React), Tailwind CSS, TypeScript
-- **向量数据库**: ChromaDB (本地部署)
+- **向量数据库**: FAISS (本地部署)
 - **大模型支持**: OpenAI GPT-4, DeepSeek (通过 LangChain 适配)
 - **OCR/多模态**: DeepSeek-OCR, Qwen-VL-Utils
 - **工具集**: DuckDuckGo Search (时政搜索), PyPDF
@@ -43,17 +43,23 @@
 conda create -n kaoyan_copilot python=3.11 -y
 conda activate kaoyan_copilot
 
-# 2. 安装依赖
+# 2. 进入后端目录
+cd backend
+
+# 3. 安装依赖
 pip install -r requirements.txt
 
-# 3. 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，填入你的 API Key (OPENAI_API_KEY, LLM_API_KEY 等)
+# 4. 配置环境变量
+cp config.example.json config.json
+# 或者如果使用 .env (如果有的话)
+# cp .env.example .env
 ```
 
 ### 3. 前端设置
 
 ```bash
+# 回到项目根目录
+cd ..
 cd web
 
 # 安装依赖
@@ -70,6 +76,7 @@ npm install
 1. **启动后端 API 服务**:
    ```bash
    # 在项目根目录下
+   cd backend
    python server.py
    ```
    - 后端服务将运行在: `http://localhost:8000`
@@ -94,20 +101,19 @@ streamlit run main.py
 
 ```
 kaoyan_copilot/
-├── app/                  # 后端核心代码
-│   ├── agents/           # 各个垂直领域 Agent 实现 (Tutor, Planner, Estimator, Interviewer, etc.)
-│   ├── core/             # 核心逻辑 (LangGraph 状态, RAG 引擎, OCR 引擎, 工具集)
-│   └── graph.py          # Agent 编排图 (Orchestrator)
-├── data/                 # 数据存储
-│   ├── vector_store/     # ChromaDB 向量数据库文件
-│   └── documents/        # 原始文档 (PDF等)
+├── backend/              # 后端项目目录
+│   ├── app/              # 后端核心代码
+│   │   ├── agents/       # 各个垂直领域 Agent 实现
+│   │   ├── core/         # 核心逻辑 (LangGraph, RAG, OCR等)
+│   │   └── graph.py      # Agent 编排图
+│   ├── data/             # 数据存储 (向量库, 文档)
+│   ├── server.py         # FastAPI 后端入口
+│   ├── ingest.py         # 数据导入脚本
+│   └── requirements.txt  # Python 依赖
 ├── web/                  # Next.js 前端项目
 │   ├── components/       # React 组件
 │   └── hooks/            # 自定义 Hooks
-├── main.py               # Streamlit 入口文件 (原型演示)
-├── server.py             # FastAPI 后端入口 (生产/Web服务)
-├── ingest.py             # 数据处理/导入脚本
-└── requirements.txt      # Python 依赖
+└── README.md             # 项目说明
 ```
 
 ## 📝 开发指南
@@ -117,6 +123,7 @@ kaoyan_copilot/
   - 将 PDF 文档放入 `data/documents/`。
   - 运行脚本导入数据 (支持 OCR):
     ```bash
+    # 在 backend 目录下
     python ingest.py path/to/your/document.pdf
     ```
   - 或者通过 API `/upload` 接口上传。

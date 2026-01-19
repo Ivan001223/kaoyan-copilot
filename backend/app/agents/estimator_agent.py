@@ -90,15 +90,8 @@ def get_estimator_node():
     """
     # 初始化 LLM
     # 初始化 LLM
-    from app.core.config_manager import config_manager
-    llm_config = config_manager.get_config().get("llm", {})
-
-    llm = ChatOpenAI(
-        model=llm_config.get("model", "gpt-4o"),
-        temperature=0.3, # 稍微增加一点创造性用于提取推断
-        base_url=llm_config.get("base_url"),
-        api_key=llm_config.get("api_key")
-    )
+    from app.core.llm_factory import get_llm
+    llm = get_llm(temperature=0.3) # 稍微增加一点创造性用于提取推断
 
     # 提取器
     extractor = llm.with_structured_output(ExtractionInput)

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, BrainCircuit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ReasoningBubbleProps {
     content: string;
@@ -46,7 +47,7 @@ export default function ReasoningBubble({ content }: ReasoningBubbleProps) {
     if (!content) return null;
 
     return (
-        <div className="w-full max-w-[85%] md:max-w-[75%] mb-2">
+        <div className="w-full mb-2">
             <div
                 className="flex items-center gap-2 cursor-pointer text-gray-500 hover:text-gray-700 transition-colors"
                 onClick={() => setIsExpanded(!isExpanded)}
@@ -62,10 +63,17 @@ export default function ReasoningBubble({ content }: ReasoningBubbleProps) {
 
             {isExpanded && (
                 <div className="mt-2 ml-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg font-mono whitespace-pre-wrap leading-relaxed break-all">
-                        <ReactMarkdown>{displayedContent || content}</ReactMarkdown>
-                        {isTyping && <span className="inline-block w-1.5 h-3 ml-1 bg-blue-400 animate-pulse align-middle"></span>}
-                    </div>
+                    {(displayedContent || content).split(/\n\s*---\s*\n/).map((part, index, array) => (
+                        <div key={index} className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg font-mono leading-relaxed break-words mb-2 last:mb-0">
+                            <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                                className="prose prose-sm prose-neutral dark:prose-invert max-w-none text-xs text-gray-600 dark:text-gray-400 [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>li]:my-0.5"
+                            >
+                                {part}
+                            </ReactMarkdown>
+                            {isTyping && index === array.length - 1 && <span className="inline-block w-1.5 h-3 ml-1 bg-blue-400 animate-pulse align-middle"></span>}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>

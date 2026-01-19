@@ -31,7 +31,16 @@ class ConfigManager:
             "llm": {
                 "api_key": os.getenv("LLM_API_KEY", os.getenv("OPENAI_API_KEY", "")),
                 "base_url": os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
-                "model": os.getenv("LLM_MODEL", "gpt-4o")
+                "model": os.getenv("LLM_MODEL", "gpt-4o") # Cloud model for text generation
+            },
+            "local_models": {
+                "ocr_model": "Qwen/Qwen2.5-VL-3B-Instruct", # Local model for OCR (Non-quantized for compatibility)
+                "embedding_model": "Qwen/Qwen3-VL-Embedding-2B", # Local model for Tokenizer/Embeddings
+                "rerank_model": "Qwen/Qwen3-VL-Reranker-2B" # Local model for Reranking
+            },
+            "search": {
+                "provider": os.getenv("SEARCH_PROVIDER", "duckduckgo"), # Options: duckduckgo, tavily
+                "tavily_api_key": os.getenv("TAVILY_API_KEY", "")
             },
             "radar": {
                 "enabled": True,

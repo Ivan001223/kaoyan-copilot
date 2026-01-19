@@ -2,13 +2,12 @@
 langchain
 langgraph
 langchain-openai
-langchain-chroma
 langchain-community
 langchain-experimental
 langchain-huggingface
 
 # Vector Store
-chromadb
+faiss-cpu
 
 # Web API
 fastapi
@@ -16,6 +15,7 @@ uvicorn
 langserve[all]
 python-multipart
 httpx
+requests
 
 # Data Processing & Document Loading
 pypdf
@@ -23,6 +23,9 @@ fpdf
 docx2txt
 openpyxl
 pandas
+addict
+easydict
+unstructured
 
 # Search
 duckduckgo-search
@@ -38,6 +41,9 @@ timm
 pillow
 pdf2image
 torch
+torchvision
+matplotlib
+tiktoken
 
 # UI
 streamlit

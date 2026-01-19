@@ -24,3 +24,6 @@ class AgentState(TypedDict, total=False):
 
     # 复习模块状态
     review_queue: List[dict]
+    
+    # MCP 服务配置
+    web_search_enabled: bool

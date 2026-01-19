@@ -3,7 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.tools import DuckDuckGoSearchRun
+from app.core.search_tool import get_search_tool
 import datetime
 
 # 1. 警报数据模型
@@ -22,7 +22,7 @@ def check_politics_news() -> PoliticsAlertMessage:
     """
     检查当天适合考研政治的时政新闻。
     """
-    search_tool = DuckDuckGoSearchRun()
+    search_tool = get_search_tool(return_results_obj=False)
     
     today_str = datetime.datetime.now().strftime("%Y-%m-%d")
     
@@ -46,15 +46,8 @@ def check_politics_news() -> PoliticsAlertMessage:
 
     # 3. LLM 分析
     # 3. LLM 分析
-    from app.core.config_manager import config_manager
-    llm_config = config_manager.get_config().get("llm", {})
-
-    llm = ChatOpenAI(
-        model=llm_config.get("model", "gpt-4o"),
-        temperature=0,
-        base_url=llm_config.get("base_url"),
-        api_key=llm_config.get("api_key")
-    )
+    from app.core.llm_factory import get_llm
+    llm = get_llm(temperature=0)
     
     # 结构化输出包装器
     analyzer = llm.with_structured_output(PoliticsAlertMessage)
