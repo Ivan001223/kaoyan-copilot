@@ -3,8 +3,14 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from app.core.search_tool import get_search_tool
-from app.core.state import AgentState
+from app.core.tools.search_tool import get_search_tool
+from app.core.workflow.state import AgentState
+import datetime
+import hashlib
+import json
+from app.core.config.config_manager import config_manager
+from app.core.llm.llm_factory import get_llm
+from langchain_core.messages import AIMessage
 
 # 1. 警报数据模型
 class AlertMessage(BaseModel):
@@ -24,7 +30,6 @@ def check_school_updates(school_name: str) -> AlertMessage:
     # 通常“考研 202X”表示考试年份是 202X-1。
     # 2026 年入学（2025 年 12 月考试）。2027 年入学（2026 年 12 月考试）。
     # 如果今天是 2026 年 1 月，2026 年的考试已经结束。我们寻找 2027 年的指南（稍后发布）或 2026 年的调整。
-    import datetime
     current_year = datetime.datetime.now().year
     # 如果我们在 1 月到 8 月，我们可能正在查看 current_year+1（下一个周期）。
     # 如果我们在 9 月到 12 月，我们肯定是在看 current_year+1。
@@ -52,7 +57,6 @@ def check_school_updates(school_name: str) -> AlertMessage:
 
     # 3. LLM 分析
     # 3. LLM 分析
-    from app.core.config_manager import config_manager
     llm_config = config_manager.get_config().get("llm", {})
 
     llm = ChatOpenAI(
@@ -143,7 +147,6 @@ class SchoolExtraction(BaseModel):
 def get_radar_node():
     # 初始化用于提取的 LLM
     # 初始化用于提取的 LLM
-    from app.core.llm_factory import get_llm
     llm = get_llm(temperature=0)
     
     extractor = llm.with_structured_output(SchoolExtraction)
@@ -178,7 +181,6 @@ def get_radar_node():
         alert = check_school_updates(target_school)
         
         # 3. 构造响应
-        from langchain_core.messages import AIMessage
         
         response_content = ""
         sources = []

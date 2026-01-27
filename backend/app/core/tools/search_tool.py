@@ -3,7 +3,7 @@ from langchain_core.tools import Tool
 from langchain_community.tools import DuckDuckGoSearchResults, DuckDuckGoSearchRun
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-from app.core.config_manager import config_manager
+from app.core.config.config_manager import config_manager
 
 class SearchToolFactory:
     @staticmethod

@@ -5,7 +5,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
-from app.core.llm_factory import get_llm
+from app.core.llm.llm_factory import get_llm
 from app.core.utils.json_parser import parse_json_from_llm
 
 # 1. Define Structured Output Model

@@ -50,6 +50,14 @@ class ConfigManager:
             "politics": {
                 "enabled": True,
                 "schedule_time": "08:30"
+            },
+            "database": {
+                "type": "mysql",
+                "host": os.getenv("DB_HOST", "localhost"),
+                "port": int(os.getenv("DB_PORT", 3306)),
+                "user": os.getenv("DB_USER", "root"),
+                "password": os.getenv("DB_PASSWORD", "password"),
+                "db_name": os.getenv("DB_NAME", "kaoyan_copilot")
             }
         }
 

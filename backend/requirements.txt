@@ -47,3 +47,4 @@ tiktoken
 
 # UI
 streamlit
+mysql-connector-python

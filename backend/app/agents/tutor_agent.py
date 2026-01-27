@@ -9,9 +9,9 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda, Runnab
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-from app.core.state import AgentState
-from app.core.llm_factory import get_llm
-from app.core.rag_engine import rag_engine
+from app.core.workflow.state import AgentState
+from app.core.llm.llm_factory import get_llm
+from app.core.services.rag_engine import rag_engine
 from app.core.utils.image_handler import process_multimodal_content
 
 # ChromaDB 持久化路径

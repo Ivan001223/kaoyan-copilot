@@ -1,9 +1,9 @@
 from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_experimental.utilities import PythonREPL
-from app.core.rag_engine import rag_engine
-from app.core.ocr_engine import ocr_engine
-from app.core.review_manager import review_manager
+from app.core.services.rag_engine import rag_engine
+from app.core.services.ocr_engine import ocr_engine
+from app.core.database.review_manager import review_manager
 import os
 import datetime
 from typing import Optional

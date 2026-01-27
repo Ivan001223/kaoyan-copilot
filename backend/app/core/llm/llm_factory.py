@@ -1,6 +1,6 @@
 from langchain_openai import ChatOpenAI
-from app.core.config_manager import config_manager
-from app.core.local_qwen import LocalQwen2VL
+from app.core.config.config_manager import config_manager
+from app.core.llm.local_qwen import LocalQwen2VL
 
 # Global singleton to avoid reloading model
 _local_qwen_instance = None

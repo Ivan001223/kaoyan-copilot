@@ -13,6 +13,14 @@
     "enabled": true,
     "schedule_time": "08:00"
   },
+  "database": {
+    "type": "mysql",
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "password",
+    "db_name": "kaoyan_copilot"
+  },
   "general": {
     "exam_date": "2026-12-20"
   }

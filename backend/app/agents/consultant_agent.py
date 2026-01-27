@@ -1,12 +1,16 @@
 import os
 import re
+import json
+from datetime import datetime
 from typing import List
-from app.core.search_tool import get_search_tool
+from app.core.tools.search_tool import get_search_tool
 
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import SystemMessage
-from app.core.state import AgentState
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from app.core.workflow.state import AgentState
+from app.core.llm.llm_factory import get_llm
+from langgraph.prebuilt import create_react_agent
 def get_consultant_node():
     """
     返回 Consultant Agent 的 LangGraph 节点（可调用对象）。
@@ -19,7 +23,6 @@ def get_consultant_node():
 
     # 2. 初始化 LLM
     # 2. 初始化 LLM
-    from app.core.llm_factory import get_llm
     llm = get_llm(temperature=0)
     
     # 绑定工具到 LLM
@@ -45,7 +48,6 @@ def get_consultant_node():
     """
     
     # 我们可以注入日期。暂时保持简单。
-    from datetime import datetime
     now = datetime.now()
     formatted_date = now.strftime("%Y-%m-%d")
     
@@ -60,8 +62,6 @@ def get_consultant_node():
         messages = state['messages']
         
         # 使用 LangGraph 的预构建 React Agent
-        from langgraph.prebuilt import create_react_agent
-        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
         
         # 检查 MCP 服务配置
         web_search_enabled = state.get("web_search_enabled", False)
@@ -143,7 +143,6 @@ def get_consultant_node():
                 
                 # Check if it is Tavily (JSON list) or DuckDuckGo (String)
                 try:
-                    import json
                     # Tavily usually returns a list of dicts directly, but here it might be serialized to string in msg.content
                     # Let's try to parse as JSON first
                     data = json.loads(content)

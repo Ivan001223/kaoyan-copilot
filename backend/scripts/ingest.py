@@ -1,6 +1,6 @@
 import os
 import argparse
-from app.core.rag_engine import rag_engine
+from app.core.services.rag_engine import rag_engine
 
 def main():
     parser = argparse.ArgumentParser(description="将 PDF 文件摄取到 Kaoyan Copilot 向量存储中。")

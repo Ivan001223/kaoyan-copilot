@@ -15,7 +15,7 @@ from transformers import TextIteratorStreamer
 from threading import Thread
 from typing import Iterator
 
-from app.core.config_manager import config_manager
+from app.core.config.config_manager import config_manager
 
 class LocalQwen2VL(BaseChatModel):
     model_name: str = "Qwen/Qwen2-VL-2B-Instruct"

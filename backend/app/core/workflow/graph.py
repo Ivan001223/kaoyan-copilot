@@ -2,8 +2,8 @@ import os
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
-from app.core.state import AgentState
-from app.core.orchestrator import route_request, RouteDecision
+from app.core.workflow.state import AgentState
+from app.core.workflow.orchestrator import route_request, RouteDecision
 
 # Import Agent Nodes
 from app.agents.tutor_agent import get_tutor_node

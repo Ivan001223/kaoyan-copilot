@@ -16,9 +16,9 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
 # Custom local models
-from app.core.embeddings import Qwen3VLEmbeddings
-from app.core.reranker import Qwen3VLReranker
-from app.core.ocr_engine import ocr_engine
+from app.core.llm.embeddings import Qwen3VLEmbeddings
+from app.core.llm.reranker import Qwen3VLReranker
+from app.core.services.ocr_engine import ocr_engine
 
 VECTOR_STORE_PATH = os.path.join("data", "vector_store_faiss")
 

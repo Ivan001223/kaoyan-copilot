@@ -7,8 +7,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, AIMessage
 import pandas as pd
 
-from app.core.state import AgentState
-from app.core.llm_factory import get_llm
+from app.core.workflow.state import AgentState
+from app.core.llm.llm_factory import get_llm
 from app.core.utils.json_parser import parse_json_from_llm
 
 # 1. 结构化输出模型

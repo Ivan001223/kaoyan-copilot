@@ -3,8 +3,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from app.core.search_tool import get_search_tool
+from app.core.tools.search_tool import get_search_tool
 import datetime
+from app.core.llm.llm_factory import get_llm
 
 # 1. 警报数据模型
 class PoliticsNewsItem(BaseModel):
@@ -46,7 +47,6 @@ def check_politics_news() -> PoliticsAlertMessage:
 
     # 3. LLM 分析
     # 3. LLM 分析
-    from app.core.llm_factory import get_llm
     llm = get_llm(temperature=0)
     
     # 结构化输出包装器

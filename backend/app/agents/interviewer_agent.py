@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import AIMessage, HumanMessage
 from app.core.state import AgentState
+from app.core.llm.llm_factory import get_llm
 
 # 1. 评分模型
 class InterviewEvaluation(BaseModel):
@@ -16,7 +17,6 @@ class InterviewEvaluation(BaseModel):
 def get_interviewer_node():
     # 初始化 LLM
     # 初始化 LLM
-    from app.core.llm_factory import get_llm
     llm = get_llm(temperature=0.2) # 低温以保持严谨
     
     # 评估器

@@ -1,6 +1,11 @@
 import os
 import sys
-from app.core.config_manager import config_manager
+from app.core.config.config_manager import config_manager
+
+try:
+    from modelscope import snapshot_download
+except ImportError:
+    snapshot_download = None
 
 def check_and_download_models():
     """
@@ -10,9 +15,7 @@ def check_and_download_models():
     """
     print("--- Checking Local Models Availability ---")
     
-    try:
-        from modelscope import snapshot_download
-    except ImportError:
+    if snapshot_download is None:
         print("Warning: 'modelscope' library not found. Skipping auto-download.")
         print("Install it with: pip install modelscope")
         return

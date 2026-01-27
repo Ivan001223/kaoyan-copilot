@@ -9,15 +9,17 @@ import 'katex/dist/katex.min.css'; // Formula styles
 import { 
     Send, User, Bot, Loader2, History, Camera, Settings, X, ChevronRight, Square, 
     Image as ImageIcon, Plus, MessageSquare, Trash2, RefreshCw, List, FileText, 
-    Globe, Link as LinkIcon 
+    Globe, Link as LinkIcon, BookOpen 
 } from 'lucide-react';
 
+import Link from 'next/link';
 import { useLLMStream, Message } from '@/hooks/useLLMStream';
 import { api } from '@/services/api';
 import ReasoningBubble from './ReasoningBubble';
 import TypewriterText from './TypewriterText';
 import SettingsModal from './SettingsModal';
 import AlertHistoryModal from './AlertHistoryModal';
+import { AbilityRadar } from './RadarChart';
 
 // Tailwind + clsx utility (inline for simplicity)
 const cn = (...classes: (string | undefined)[]) => classes.filter(Boolean).join(' ');
@@ -46,6 +48,8 @@ export default function ChatInterface() {
     const [sessionId, setSessionId] = useState<string>('');
     const [deleteTarget, setDeleteTarget] = useState<any>(null);
     const DEFAULT_USER_ID = "default_user"; // Mock user ID
+    
+    const [radarStats, setRadarStats] = useState<any[]>([]);
 
     const [quote, setQuote] = useState("星光不问赶路人，时光不负有心人。");
     const quoteFetchedRef = useRef(false);
@@ -57,6 +61,9 @@ export default function ChatInterface() {
         }
         fetchHistory();
         fetchAlerts();
+        
+        // Fetch Radar Stats
+        api.getRadarStats(DEFAULT_USER_ID).then(setRadarStats).catch(console.error);
         
         // Fetch Quote from Backend (Prevent double fetch in Strict Mode)
         if (!quoteFetchedRef.current) {
@@ -374,11 +381,16 @@ export default function ChatInterface() {
                     <div className="px-2 py-2">
                         <button
                             onClick={handleNewChat}
-                            className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/20 mb-6"
+                            className="w-full flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/20 mb-2"
                         >
                             <Plus className="w-4 h-4" />
                             <span className="font-medium text-sm">新建对话</span>
                         </button>
+                        
+                        <Link href="/practice" className="w-full flex items-center justify-center space-x-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 py-2.5 rounded-xl transition-all shadow-sm mb-6">
+                            <BookOpen className="w-4 h-4" />
+                            <span className="font-medium text-sm">智能刷题</span>
+                        </Link>
                         
                         <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">今日概览</h3>
                         {/* Placeholder for dashboard stats */}
@@ -602,8 +614,13 @@ export default function ChatInterface() {
                                             </div>
                                         </div>
                                     </div>
+                                    
+                                    {/* Ability Radar (New) */}
+                                    <div className="w-full max-w-4xl mt-4 px-2 animate-in fade-in slide-in-from-bottom-5 duration-700 delay-200">
+                                        <AbilityRadar data={radarStats} />
+                                    </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-lg mt-4">
                                         {[
                                             { text: "📅 为我也生成一份数学复习计划", search: false },
                                             { text: "🏫 帮我分析一下浙江大学计算机", search: true },

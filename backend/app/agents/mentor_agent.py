@@ -2,6 +2,8 @@ import os
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from app.core.state import AgentState
+from app.core.llm.llm_factory import get_llm
+from langchain_core.messages import AIMessage
 
 def get_mentor_node():
     """
@@ -9,7 +11,7 @@ def get_mentor_node():
     """
     # 初始化 LLM
     # 初始化 LLM
-    from app.core.llm_factory import get_llm
+    from app.core.llm.llm_factory import get_llm
     llm = get_llm(temperature=0.7) # 较高的温度以增加同理心
 
     # 系统提示
@@ -43,7 +45,6 @@ def get_mentor_node():
         
         response = chain.invoke({"input": user_input})
         
-        from langchain_core.messages import AIMessage
         return {"messages": [AIMessage(content=response.content)]}
 
     return mentor_node

@@ -1,9 +1,11 @@
 import os
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from app.core.state import AgentState
+from app.core.workflow.state import AgentState
+from app.core.llm.llm_factory import get_llm
+from langchain_core.messages import AIMessage
 
 # 1. 数据模型
 class TargetSchool(BaseModel):
@@ -68,7 +70,6 @@ def predict_success_probability(user: UserProgress, target: TargetSchool) -> flo
     # 限制概率范围
     return max(0.01, min(0.99, prob))
 
-from typing import Optional
 
 # 1.5 提取模型
 class ExtractionInput(BaseModel):
@@ -90,7 +91,6 @@ def get_estimator_node():
     """
     # 初始化 LLM
     # 初始化 LLM
-    from app.core.llm_factory import get_llm
     llm = get_llm(temperature=0.3) # 稍微增加一点创造性用于提取推断
 
     # 提取器
@@ -143,7 +143,6 @@ def get_estimator_node():
             missing_fields.append("你目前的模拟分数")
             
         if missing_fields:
-            from langchain_core.messages import AIMessage
             # 构造追问消息
             ask_msg = f"为了帮您准确估算成功率，我还需要了解以下信息：\n" + "\n".join([f"- {field}" for field in missing_fields])
             ask_msg += "\n\n(例如：我考了320分，目标分数是360分)"
@@ -185,7 +184,6 @@ def get_estimator_node():
             "study_hours": user.study_hours_per_day
         })
         
-        from langchain_core.messages import AIMessage
         return {"messages": [AIMessage(content=response.content)]}
 
     return estimator_node

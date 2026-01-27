@@ -1,8 +1,9 @@
 import os
 import tempfile
+import traceback
 from pdf2image import convert_from_path
 from typing import List, Union
-from app.core.llm_factory import get_local_qwen_provider
+from app.core.llm.llm_factory import get_local_qwen_provider
 from langchain_core.messages import HumanMessage
 
 class QwenVLOCR:
@@ -71,7 +72,6 @@ class QwenVLOCR:
 
         except Exception as e:
             print(f"OCR Error: {e}")
-            import traceback
             traceback.print_exc()
             return ""
         finally:

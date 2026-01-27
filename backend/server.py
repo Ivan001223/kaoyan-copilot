@@ -16,15 +16,17 @@ import langserve.serialization
 from pydantic import BaseModel
 from langgraph.types import Send
 
-from app.core.graph import app as graph_app
-from app.core.rag_engine import RAGEngine
-from app.core.config_manager import config_manager
-from app.core.model_loader import check_and_download_models
-from app.core.ocr_engine import ocr_engine
+from app.core.workflow.graph import app as graph_app
+from app.core.services.rag_engine import RAGEngine
+from app.core.config.config_manager import config_manager
+from app.core.llm.model_loader import check_and_download_models
+from app.core.services.ocr_engine import ocr_engine
 from app.agents.radar_agent import check_school_updates
 from app.agents.politics_agent import check_politics_news
-from app.core.history_manager import history_manager
-from app.core.alert_manager import alert_manager
+from app.core.database.history_manager import history_manager
+from app.core.database.alert_manager import alert_manager
+from app.core.database.question_manager import question_manager
+from app.core.database.review_manager import review_manager
 
 # --- PATCH: Fix langserve serialization for Send objects and broken default ---
 def custom_default(obj):
@@ -447,6 +449,65 @@ async def delete_history_session(user_id: str, session_id: str):
         return {"message": "Session deleted"}
     else:
         raise HTTPException(status_code=404, detail="Session not found")
+
+# 5. Question Bank API
+@app.get("/api/questions")
+async def get_questions(subject: str = None, year: int = None, limit: int = 10, offset: int = 0):
+    """Filter questions."""
+    return question_manager.get_questions(subject, year, limit, offset)
+
+@app.get("/api/questions/{id}")
+async def get_question(id: int):
+    """Get question details."""
+    q = question_manager.get_question_by_id(id)
+    if not q:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return q
+
+@app.post("/api/questions/submit")
+async def submit_answer(payload: Dict[str, Any]):
+    """Submit answer."""
+    user_id = payload.get("user_id", "default_user") # In real app, get from auth
+    question_id = payload.get("question_id")
+    selected_option = payload.get("selected_option")
+    
+    if not question_id or not selected_option:
+        raise HTTPException(status_code=400, detail="Missing question_id or selected_option")
+        
+    try:
+        result = question_manager.submit_answer(user_id, question_id, selected_option)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/questions/{id}/variations")
+async def get_variations(id: int):
+    """Get similar questions (One Example, Three Reflections)."""
+    return question_manager.get_similar_questions(id)
+
+# 6. Error Book API
+@app.get("/api/error-book")
+async def get_error_book():
+    """Get due reviews."""
+    return review_manager.get_due_reviews()
+
+@app.post("/api/error-book/review")
+async def submit_review(payload: Dict[str, Any]):
+    """Submit SM-2 review feedback."""
+    task_id = payload.get("task_id")
+    quality = payload.get("quality") # 0-5
+    
+    if task_id is None or quality is None:
+        raise HTTPException(status_code=400, detail="Missing task_id or quality")
+        
+    result = review_manager.submit_review_feedback(task_id, quality)
+    return {"message": result}
+
+# 7. Radar Stats API
+@app.get("/api/stats/radar")
+async def get_radar_stats(user_id: str = "default_user"):
+    """Get user capability model."""
+    return question_manager.get_radar_stats(user_id)
 
 if __name__ == "__main__":
     # 生产环境中运行：uvicorn server:app --host 0.0.0.0 --port 8000

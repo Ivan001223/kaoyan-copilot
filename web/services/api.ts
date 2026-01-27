@@ -103,5 +103,86 @@ export const api = {
 
         if (!res.ok) throw new Error('图片上传失败');
         return res.json();
+    },
+
+    // 6. Question Bank
+    getQuestions: async (params: { subject?: string; year?: number; limit?: number; offset?: number }) => {
+        const url = new URL(`${API_BASE_URL}/api/questions`);
+        if (params.subject) url.searchParams.append('subject', params.subject);
+        if (params.year) url.searchParams.append('year', params.year.toString());
+        if (params.limit) url.searchParams.append('limit', params.limit.toString());
+        if (params.offset) url.searchParams.append('offset', params.offset.toString());
+        
+        const res = await fetch(url.toString());
+        return res.json() as Promise<Question[]>;
+    },
+
+    getQuestion: async (id: number) => {
+        const res = await fetch(`${API_BASE_URL}/api/questions/${id}`);
+        return res.json() as Promise<Question>;
+    },
+
+    submitAnswer: async (userId: string, questionId: number, selectedOption: string) => {
+        const res = await fetch(`${API_BASE_URL}/api/questions/submit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, question_id: questionId, selected_option: selectedOption })
+        });
+        if (!res.ok) throw new Error('Failed to submit answer');
+        return res.json();
+    },
+    
+    getVariations: async (id: number) => {
+        const res = await fetch(`${API_BASE_URL}/api/questions/${id}/variations`);
+        return res.json() as Promise<Question[]>;
+    },
+
+    // 7. Error Book
+    getErrorBook: async () => {
+        const res = await fetch(`${API_BASE_URL}/api/error-book`);
+        return res.json() as Promise<ReviewTask[]>;
+    },
+
+    submitReview: async (taskId: number, quality: number) => {
+        const res = await fetch(`${API_BASE_URL}/api/error-book/review`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: taskId, quality })
+        });
+        return res.json();
+    },
+
+    // 8. Stats
+    getRadarStats: async (userId: string) => {
+        const res = await fetch(`${API_BASE_URL}/api/stats/radar?user_id=${userId}`);
+        return res.json() as Promise<RadarStat[]>;
     }
 };
+
+export interface Question {
+    id: number;
+    content: string;
+    type: 'single_choice' | 'multi_choice' | 'fill_blank';
+    options: string[] | Record<string, string>;
+    answer: string;
+    explanation: string;
+    subject: string;
+    year: number;
+    tags: string[];
+}
+
+export interface ReviewTask {
+    id: number;
+    question_id?: number;
+    question_text: string;
+    review_stage: number;
+    next_review_time: string;
+}
+
+export interface RadarStat {
+    subject: string;
+    tag: string;
+    total: number;
+    correct: number;
+    score: number;
+}
