@@ -17,13 +17,14 @@
 
 ### 🧠 核心能力
 - **OCR & 公式识别**: 集成 DeepSeek-OCR / Qwen-VL，支持高精度识别数学公式、PDF文档并转换为 Markdown 格式，方便知识库构建。
+- **多模态 RAG**: 支持图文混合检索，基于 Qwen-VL-Embedding 实现。
 
 ## 🛠️ 技术架构
 
 - **后端**: Python 3.11, FastAPI, LangChain, LangGraph
 - **前端**: Next.js 14 (React), Tailwind CSS, TypeScript
-- **向量数据库**: FAISS (本地部署)
-- **大模型支持**: OpenAI GPT-4, DeepSeek (通过 LangChain 适配)
+- **向量数据库**: ChromaDB (本地持久化)
+- **大模型支持**: Qwen (本地/API), DeepSeek, OpenAI
 - **OCR/多模态**: DeepSeek-OCR, Qwen-VL-Utils
 - **工具集**: DuckDuckGo Search (时政搜索), PyPDF
 
@@ -51,16 +52,14 @@ pip install -r requirements.txt
 
 # 4. 配置环境变量
 cp config.example.json config.json
-# 或者如果使用 .env (如果有的话)
-# cp .env.example .env
+# 编辑 config.json 填入你的 API Keys (如 DeepSeek API, OpenAI API 等)
 ```
 
 ### 3. 前端设置
 
 ```bash
 # 回到项目根目录
-cd ..
-cd web
+cd ../web
 
 # 安装依赖
 npm install
@@ -71,12 +70,9 @@ npm install
 
 ### 4. 运行项目
 
-#### 方式 A: 完整全栈模式 (推荐)
-
 1. **启动后端 API 服务**:
    ```bash
-   # 在项目根目录下
-   cd backend
+   # 在 backend 目录下
    python server.py
    ```
    - 后端服务将运行在: `http://localhost:8000`
@@ -90,41 +86,39 @@ npm install
    ```
    - 访问前端页面: `http://localhost:3000`
 
-#### 方式 B: Streamlit 原型模式 (仅后端)
-
-如果你只想快速测试 Agent 逻辑，可以使用 Streamlit 界面：
-```bash
-streamlit run main.py
-```
-
 ## 📂 项目结构
 
 ```
 kaoyan_copilot/
-├── backend/              # 后端项目目录
-│   ├── app/              # 后端核心代码
-│   │   ├── agents/       # 各个垂直领域 Agent 实现
-│   │   ├── core/         # 核心逻辑 (LangGraph, RAG, OCR等)
-│   │   └── graph.py      # Agent 编排图
-│   ├── data/             # 数据存储 (向量库, 文档)
-│   ├── server.py         # FastAPI 后端入口
-│   ├── ingest.py         # 数据导入脚本
-│   └── requirements.txt  # Python 依赖
-├── web/                  # Next.js 前端项目
-│   ├── components/       # React 组件
-│   └── hooks/            # 自定义 Hooks
-└── README.md             # 项目说明
+├── backend/                  # 后端项目目录
+│   ├── app/                  # 后端核心代码
+│   │   ├── agents/           # 各个垂直领域 Agent 实现
+│   │   ├── core/             # 核心逻辑
+│   │   │   ├── workflow/     # LangGraph 编排 (graph.py)
+│   │   │   ├── database/     # 数据库交互
+│   │   │   └── llm/          # 模型加载与 Embeddings
+│   │   └── server.py         # FastAPI 后端入口
+│   ├── data/                 # 数据存储
+│   │   ├── vector_store/     # ChromaDB 向量库文件
+│   │   └── documents/        # 原始 PDF 文档
+│   ├── scripts/              # 工具脚本 (ingest.py, seed_mysql.py)
+│   └── requirements.txt      # Python 依赖
+├── web/                      # Next.js 前端项目
+│   ├── app/                  # Next.js App Router 页面
+│   ├── components/           # React 组件
+│   └── services/             # API 请求封装
+└── README.md                 # 项目说明
 ```
 
 ## 📝 开发指南
 
-- **新增 Agent**: 在 `app/agents/` 下创建新的 Agent 类，并在 `app/graph.py` 中注册。
+- **新增 Agent**: 在 `backend/app/agents/` 下创建新的 Agent 类，并在 `backend/app/core/workflow/graph.py` 中注册。
 - **RAG 数据管理**: 
-  - 将 PDF 文档放入 `data/documents/`。
+  - 将 PDF 文档放入 `backend/data/documents/`。
   - 运行脚本导入数据 (支持 OCR):
     ```bash
     # 在 backend 目录下
-    python ingest.py path/to/your/document.pdf
+    python scripts/ingest.py
     ```
-  - 或者通过 API `/upload` 接口上传。
-- **定时任务**: `server.py` 中包含后台调度器，用于运行 Radar Agent 和 Politics Agent。
+  - 或者通过前端/API 上传接口进行文档处理。
+- **模型配置**: 在 `backend/config.json` 中修改模型路径或 API Key。
