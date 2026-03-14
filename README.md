@@ -6,7 +6,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=flat&logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Latest-FF6F61?style=flat&logo=langchain&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat&logo=next.js&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
+![License](https://img.shields.io/badge/License-Apache--2.0-orange.svg)
 
 **全流程考研备考 AI 助手** · 基于 Multi-Agent + LangGraph 架构
 
